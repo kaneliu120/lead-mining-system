@@ -16,6 +16,8 @@ WORKDIR /app
 
 # ── 安装 Python 依赖 ───────────────────────────────────────────────────────────
 COPY requirements.txt .
+# 预装 CPU-only PyTorch，避免 sentence-transformers 自动拉取 ~10GB CUDA 版本
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── 安装 Playwright Chromium（仅浏览器二进制，系统依赖已在上方安装）──────────────
