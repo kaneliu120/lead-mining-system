@@ -108,6 +108,8 @@ services:
       # 传递给工作流 HTTP 节点可用的变量
       LEAD_MINER_URL:                 http://lead-miner:8000
       GEMINI_API_KEY:                 ${GEMINI_API_KEY}
+      # Cookie 安全（HTTP 访问时必须设为 false；如果配了 HTTPS 可删除此行）
+      N8N_SECURE_COOKIE:              "false"
       # 日志
       N8N_LOG_LEVEL:                  info
       N8N_LOG_OUTPUT:                 console

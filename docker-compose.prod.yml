@@ -89,6 +89,8 @@ services:
       DB_POSTGRESDB_SCHEMA:           n8n
       LEAD_MINER_URL:                 http://lead-miner:8000
       GEMINI_API_KEY:                 ${GEMINI_API_KEY}
+      # Cookie 安全（HTTP 访问时必须设为 false；如果配了 HTTPS 可删除此行）
+      N8N_SECURE_COOKIE:              "false"
       N8N_LOG_LEVEL:                  info
     depends_on:
       postgres:
