@@ -653,27 +653,27 @@ def _row_to_enriched_kwargs(row: dict) -> dict:
 
 # 所有可配置 API Key 的描述信息
 _API_KEY_DEFS = [
-    {"key": "GEMINI_API_KEY",           "label": "Gemini API Key",          "hint": "AI 富化引擎，必填", "url": "https://aistudio.google.com/app/apikey"},
-    {"key": "SERPER_API_KEY",           "label": "Serper API Key",          "hint": "Google 搜索代理 (Phase 1)", "url": "https://serper.dev"},
-    {"key": "HUNTER_API_KEY",           "label": "Hunter.io API Key",       "hint": "邮箱发现 (Phase 1)", "url": "https://hunter.io"},
-    {"key": "GOOGLE_API_KEY",           "label": "Google API Key",          "hint": "Google CSE 搜索 (Phase 2)", "url": "https://console.cloud.google.com"},
-    {"key": "GOOGLE_CSE_CX",            "label": "Google CSE CX",           "hint": "Custom Search Engine ID", "url": "https://programmablesearchengine.google.com"},
-    {"key": "REDDIT_CLIENT_ID",         "label": "Reddit Client ID",        "hint": "Reddit 采集 (Phase 2)", "url": "https://www.reddit.com/prefs/apps"},
-    {"key": "REDDIT_CLIENT_SECRET",     "label": "Reddit Client Secret",    "hint": "Reddit 认证密钥", "url": "https://www.reddit.com/prefs/apps"},
-    {"key": "FACEBOOK_ACCESS_TOKEN",    "label": "Facebook Access Token",   "hint": "Facebook 商家搜索 (Phase 3)", "url": "https://developers.facebook.com"},
+    {"key": "GEMINI_API_KEY",           "label": "Gemini API Key",          "hint": "AI 富化引擎，必填",           "hint_en": "AI Enrichment Engine — Required",              "url": "https://aistudio.google.com/app/apikey"},
+    {"key": "SERPER_API_KEY",           "label": "Serper API Key",          "hint": "Google 搜索代理 (Phase 1)",   "hint_en": "Google Search Proxy (Phase 1)",                 "url": "https://serper.dev"},
+    {"key": "HUNTER_API_KEY",           "label": "Hunter.io API Key",       "hint": "邮箱发现 (Phase 1)",          "hint_en": "Email Discovery (Phase 1)",                     "url": "https://hunter.io"},
+    {"key": "GOOGLE_API_KEY",           "label": "Google API Key",          "hint": "Google CSE 搜索 (Phase 2)",   "hint_en": "Google CSE Search (Phase 2)",                   "url": "https://console.cloud.google.com"},
+    {"key": "GOOGLE_CSE_CX",            "label": "Google CSE CX",           "hint": "Custom Search Engine ID",     "hint_en": "Custom Search Engine ID",                       "url": "https://programmablesearchengine.google.com"},
+    {"key": "REDDIT_CLIENT_ID",         "label": "Reddit Client ID",        "hint": "Reddit 采集 (Phase 2)",       "hint_en": "Reddit Mining (Phase 2)",                       "url": "https://www.reddit.com/prefs/apps"},
+    {"key": "REDDIT_CLIENT_SECRET",     "label": "Reddit Client Secret",    "hint": "Reddit 认证密钥",             "hint_en": "Reddit Authentication Secret",                  "url": "https://www.reddit.com/prefs/apps"},
+    {"key": "FACEBOOK_ACCESS_TOKEN",    "label": "Facebook Access Token",   "hint": "Facebook 商家搜索 (Phase 3)", "hint_en": "Facebook Business Search (Phase 3)",            "url": "https://developers.facebook.com"},
 ]
 
 # Miner 展示名和相关说明
 _MINER_DISPLAY = {
-    "serper":       {"label": "Serper",       "desc": "Google 搜索代理，菲律宾 SME 首选",  "phase": 1},
-    "hunter":       {"label": "Hunter.io",    "desc": "邮箱验证与发现",                   "phase": 1},
-    "google_cse":   {"label": "Google CSE",   "desc": "Google 自定义搜索引擎",             "phase": 2},
-    "sec_ph":       {"label": "SEC PH",       "desc": "菲律宾企业注册查询（无需 Key）",    "phase": 2},
-    "reddit":       {"label": "Reddit",       "desc": "Reddit 社区线索挖掘",               "phase": 2},
-    "yellow_pages": {"label": "Yellow Pages", "desc": "黄页商家数据（无需 Key）",          "phase": 2},
-    "philgeps":     {"label": "PhilGEPS",     "desc": "政府采购公告（无需 Key）",          "phase": 3},
-    "facebook":     {"label": "Facebook",     "desc": "Facebook 商家页面搜索",             "phase": 3},
-    "dti_bnrs":     {"label": "DTI BNRS",     "desc": "菲律宾贸工部企业注册（无需 Key）",  "phase": 3},
+    "serper":       {"label": "Serper",       "desc": "Google 搜索代理，菲律宾 SME 首选",     "desc_en": "Google Search Proxy — Best for Philippines SME",        "phase": 1},
+    "hunter":       {"label": "Hunter.io",    "desc": "邮箱验证与发现",                       "desc_en": "Email Verification & Discovery",                        "phase": 1},
+    "google_cse":   {"label": "Google CSE",   "desc": "Google 自定义搜索引擎",                "desc_en": "Google Custom Search Engine",                           "phase": 2},
+    "sec_ph":       {"label": "SEC PH",       "desc": "菲律宾企业注册查询（无需 Key）",       "desc_en": "Philippines SEC Company Registry (No API Key)",         "phase": 2},
+    "reddit":       {"label": "Reddit",       "desc": "Reddit 社区线索挖掘",                  "desc_en": "Reddit Community Lead Mining",                          "phase": 2},
+    "yellow_pages": {"label": "Yellow Pages", "desc": "黄页商家数据（无需 Key）",             "desc_en": "Yellow Pages Business Data (No API Key)",               "phase": 2},
+    "philgeps":     {"label": "PhilGEPS",     "desc": "政府采购公告（无需 Key）",             "desc_en": "Government Procurement Announcements (No API Key)",     "phase": 3},
+    "facebook":     {"label": "Facebook",     "desc": "Facebook 商家页面搜索",                "desc_en": "Facebook Business Page Search",                         "phase": 3},
+    "dti_bnrs":     {"label": "DTI BNRS",     "desc": "菲律宾贸工部企业注册（无需 Key）",    "desc_en": "Philippines DTI Business Registration (No API Key)",    "phase": 3},
 }
 
 
@@ -724,11 +724,12 @@ async def admin_get_settings():
         else:
             masked = ""
         api_keys_out[d["key"]] = {
-            "label":   d["label"],
-            "hint":    d["hint"],
-            "url":     d["url"],
-            "masked":  masked,
-            "has_key": bool(raw),
+            "label":    d["label"],
+            "hint":     d["hint"],
+            "hint_en":  d.get("hint_en", d["hint"]),
+            "url":      d["url"],
+            "masked":   masked,
+            "has_key":  bool(raw),
         }
 
     return {"miners": miners_out, "api_keys": api_keys_out}
@@ -1196,13 +1197,14 @@ async function loadSettings(){
   document.getElementById('miner-grid').innerHTML=order.filter(n=>res.miners[n]).map(name=>{
     const m=res.miners[name];
     const d=m.display;
+    const desc=(_lang==='zh'?(d.desc||d.desc_en):(d.desc_en||d.desc));
     const keyInfo=m.env_key?`<div class="key-status"><span class="dot ${m.has_key?'dot-green':'dot-red'}"></span><span>${m.env_key}: ${m.has_key?t('configured'):t('notConfiguredBadge')}</span></div>`:`<div class="key-status"><span class="dot dot-green"></span><span>${t('noApiKey')}</span></div>`;
     const keyInput=(!m.has_key&&m.env_key)?`<div class="key-row"><input type="password" id="ki-${name}" placeholder="${m.env_key}…"><button class="btn btn-primary btn-sm" onclick="saveKey('${m.env_key}','ki-${name}')">${t('saveBtn')}</button></div>`:'';
     return`<div class="miner-card ${m.enabled?'enabled':''}" id="mc-${name}">
       <div class="mc-header">
         <div>
           <div class="mc-name">${d.label}</div>
-          <div class="mc-desc">${d.desc}</div>
+          <div class="mc-desc">${desc}</div>
         </div>
         <span class="badge ${phaseColors[d.phase]||'badge-gray'}">P${d.phase}</span>
       </div>
@@ -1239,7 +1241,7 @@ async function loadKeys(){
     <div class="key-table-row">
       <div>
         <div style="font-weight:600;font-size:.85rem">${info.label}</div>
-        <div style="font-size:.72rem;color:#475569;margin-top:2px">${info.hint} · <a href="${info.url}" target="_blank" style="color:#38bdf8;text-decoration:none">${t('applyLink')}</a></div>
+        <div style="font-size:.72rem;color:#475569;margin-top:2px">${_lang==='zh'?info.hint:(info.hint_en||info.hint)} · <a href="${info.url}" target="_blank" style="color:#38bdf8;text-decoration:none">${t('applyLink')}</a></div>
       </div>
       <div>
         <div style="font-family:monospace;font-size:.78rem;color:${info.has_key?'#34d399':'#f87171'};margin-bottom:4px">${info.has_key?info.masked:t('notConfigured')}</div>
