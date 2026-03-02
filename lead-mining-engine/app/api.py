@@ -5,14 +5,18 @@ FastAPI 服务层 — Lead Mining Engine 对外接口
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Body
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Body, Request, Response, Cookie
 from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from app.middleware import RateLimitMiddleware
@@ -81,6 +85,80 @@ app = FastAPI(
 
 # P2-6：速率限制中间件（令牌桶，防止单 IP 滥用）
 app.add_middleware(RateLimitMiddleware, enabled=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 管理员认证 — 基于 HMAC 签名 Cookie
+# 设置环境变量 ADMIN_PASSWORD 修改登录密码（默认 lead@Admin2025）
+# 设置环境变量 ADMIN_SECRET 修改签名密钥
+# ══════════════════════════════════════════════════════════════════════════════
+_ADMIN_SECRET   = os.environ.get("ADMIN_SECRET",   "changeme-replace-in-production-secret")
+_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lead@Admin2025")
+_SESSION_COOKIE = "admin_session"
+_SESSION_TTL    = 86400  # 24 小时
+
+
+def _make_session_token() -> str:
+    """生成带时间戳的 HMAC 签名 session token"""
+    ts  = str(int(time.time()))
+    sig = hmac.new(_ADMIN_SECRET.encode(), ts.encode(), hashlib.sha256).hexdigest()
+    return f"{ts}.{sig}"
+
+
+def _verify_session(token: str | None) -> bool:
+    """校验 session token 的签名和有效期"""
+    if not token:
+        return False
+    try:
+        ts_str, sig = token.split(".", 1)
+        expected = hmac.new(_ADMIN_SECRET.encode(), ts_str.encode(), hashlib.sha256).hexdigest()
+        if not secrets.compare_digest(sig, expected):
+            return False
+        if time.time() - int(ts_str) > _SESSION_TTL:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+_LOGIN_HTML = """<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Lead Mining 控制台 — 登录</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#0f172a;color:#e2e8f0;display:flex;align-items:center;
+  justify-content:center;min-height:100vh}}
+.card{{background:#1e293b;border-radius:14px;padding:40px 36px;width:100%;max-width:380px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5)}}
+.logo{{font-size:1.6rem;font-weight:700;color:#38bdf8;text-align:center;margin-bottom:6px}}
+.sub{{font-size:.82rem;color:#64748b;text-align:center;margin-bottom:28px}}
+label{{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:6px}}
+input[type=password]{{width:100%;background:#0f172a;border:1px solid #334155;
+  border-radius:8px;padding:10px 14px;color:#e2e8f0;font-size:.9rem;margin-bottom:20px}}
+input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.2)}}
+button{{width:100%;background:#1d4ed8;color:#fff;border:none;border-radius:8px;
+  padding:11px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s}}
+button:hover{{background:#1e40af}}
+.err{{background:#3b1f1f;color:#fca5a5;border-radius:8px;padding:10px 14px;
+  font-size:.82rem;margin-bottom:16px;display:none}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">&#9889; Lead Mining</div>
+  <div class="sub">控制台登录</div>
+  {err_block}
+  <form method="POST" action="/login">
+    <label>管理员密码</label>
+    <input type="password" name="password" placeholder="请输入密码…" autofocus required>
+    <button type="submit">登录</button>
+  </form>
+</div>
+</body></html>"""
+
 
 
 # ── Request / Response 模型 ────────────────────────────────────────────────────
@@ -330,9 +408,15 @@ async def stats():
 
 
 @app.get("/dashboard", response_class=HTMLResponse, tags=["System"])
-async def dashboard():
-    """可视化监控 Dashboard — 漏斗数据 + Top Leads"""
-    return """<!DOCTYPE html>
+async def dashboard_legacy():
+    """旧版 dashboard，重定向至新版 /admin"""    
+    return RedirectResponse(url="/admin", status_code=301)
+
+
+@app.get("/_old_dashboard_html", include_in_schema=False)
+async def dashboard_html_unused():
+    """（已废弃，保留历史记录）"""  # noqa
+    return """<!DOCTYPE html>\n<!-- UNUSED LEGACY -->
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
@@ -694,15 +778,54 @@ async def _restore_db_settings():
         logger.warning(f"Admin: could not restore DB settings: {exc}")
 
 
-@app.get("/dashboard", response_class=HTMLResponse, tags=["System"])
-async def dashboard_redirect():
-    """旧版 dashboard，已升级为 /admin"""
-    return RedirectResponse(url="/admin", status_code=301)
+@app.get("/", include_in_schema=False)
+async def root_redirect(session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE)):
+    """根路径：已登录 → /admin，未登录 → /login"""
+    if _verify_session(session):
+        return RedirectResponse(url="/admin", status_code=302)
+    return RedirectResponse(url="/login", status_code=302)
+
+
+@app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def login_page():
+    """管理员登录页"""
+    return _LOGIN_HTML.format(err_block="")
+
+
+@app.post("/login", include_in_schema=False)
+async def do_login(request: Request):
+    """校验密码并设置 session cookie"""
+    form = await request.form()
+    password = str(form.get("password", ""))
+    if not secrets.compare_digest(password, _ADMIN_PASSWORD):
+        err = '<div class="err" style="display:block">密码错误，请重试</div>'
+        html = _LOGIN_HTML.format(err_block=err)
+        return HTMLResponse(content=html, status_code=401)
+    token = _make_session_token()
+    resp = RedirectResponse(url="/admin", status_code=302)
+    resp.set_cookie(
+        _SESSION_COOKIE, token,
+        httponly=True, samesite="lax",
+        max_age=_SESSION_TTL, secure=False,
+    )
+    return resp
+
+
+@app.get("/logout", include_in_schema=False)
+async def logout():
+    """退出登录并清除 session cookie"""
+    resp = RedirectResponse(url="/login", status_code=302)
+    resp.delete_cookie(_SESSION_COOKIE)
+    return resp
 
 
 @app.get("/admin", response_class=HTMLResponse, tags=["Admin"])
-async def admin_panel():
-    """⚡ Lead Mining 综合管理控制台"""
+async def admin_panel(
+    session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
+):
+    """⚡ Lead Mining 综合管理控制台"""  
+    if not _verify_session(session):
+        return RedirectResponse(url="/login", status_code=302)
     return """<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -801,7 +924,10 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
 <body>
 <div class="header">
   <h1>&#9889; Lead Mining 控制台 <span class="status-dot" id="htdot"></span></h1>
-  <a href="/docs" target="_blank" style="font-size:.78rem;color:#64748b;text-decoration:none">API Docs ↗</a>
+  <div style="display:flex;align-items:center;gap:12px">
+    <a href="/docs" target="_blank" style="font-size:.78rem;color:#64748b;text-decoration:none">API Docs ↗</a>
+    <a href="/logout" style="font-size:.78rem;color:#94a3b8;text-decoration:none;background:#1e293b;border:1px solid #334155;padding:4px 12px;border-radius:6px;transition:all .2s" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#1e293b'">退出登录</a>
+  </div>
 </div>
 <div class="tabs">
   <div class="tab active" onclick="switchTab(0)">&#128200; 监控面板</div>

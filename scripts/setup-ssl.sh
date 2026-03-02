@@ -193,13 +193,13 @@ server {
     }
 }
 
-# ── 根域名 → n8n 跳转 ────────────────────────────────────────────────────────
+# ── 根域名 → 控制台跳转 ──────────────────────────────────────────────────────
 server {
     listen 443 ssl;
     server_name ${DOMAIN};
     ssl_certificate     /etc/letsencrypt/live/lead-mining/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/lead-mining/privkey.pem;
-    return 301 https://n8n.${DOMAIN}\$request_uri;
+    return 301 https://mine.${DOMAIN}\$request_uri;
 }
 NGINXEOF
   echo "✅ 已生成 HTTPS 配置"
