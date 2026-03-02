@@ -1,0 +1,54 @@
+miners:
+  # ── Phase 1 主力插件 ────────────────────────────────────────────
+  serper:
+    enabled: true
+    country_code: "ph"
+    language: "en"
+    results_per_page: 20
+    rate_limit_per_minute: 60
+    timeout_seconds: 15
+
+  apollo:
+    enabled: true
+    rate_limit_per_minute: 30
+    timeout_seconds: 20
+
+  # ── Phase 2 补充插件 ────────────────────────────────────────────
+  google_cse:
+    enabled: false
+    country: "countryPH"
+    rate_limit_per_minute: 10          # 免费 100/天，保守限速
+
+  sec_ph:
+    enabled: false
+    rate_limit_per_minute: 20
+    timeout_seconds: 30
+
+  reddit:
+    enabled: false
+    rate_limit_per_minute: 55
+    target_subreddits:
+      - Philippines
+      - phinvest
+      - Entrepreneur
+      - smallbusiness
+
+  # ── Phase 3 爬虫插件 ────────────────────────────────────────────
+  philgeps:
+    enabled: false
+    rate_limit_per_minute: 5           # 政府网站，极保守
+    timeout_seconds: 60
+
+  facebook:
+    enabled: false
+    api_version: "v22.0"
+    radius_meters: 30000               # 30 公里覆盖大马尼拉
+    page_limit: 50                     # 每页条数（Graph API 最大 100）
+    rate_limit_per_minute: 30
+    timeout_seconds: 20
+
+  dti_bnrs:
+    enabled: false
+    rate_limit_per_minute: 3           # 政府网站，极保守
+    timeout_seconds: 60
+    max_pages: 5                       # 每次搜索最多翻页数

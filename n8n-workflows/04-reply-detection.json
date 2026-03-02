@@ -1,0 +1,300 @@
+{
+  "name": "04 - Reply Detection & Follow-up",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "reply-trigger",
+      "name": "Check Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "id": "imap-trigger-node",
+      "name": "Fetch Unread Email (IMAP)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "mailbox": "INBOX",
+        "action": "read",
+        "markSeen": true,
+        "download": false,
+        "options": {}
+      },
+      "credentials": {
+        "imap": {
+          "id": "imap-gmail-cred",
+          "name": "Gmail IMAP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 过滤出来自 outreach_log 中目标邮箱的回复\nconst emails = $input.all();\nconst replies = emails.filter(item => {\n  const from    = item.json.from || '';\n  const subject = (item.json.subject || '').toLowerCase();\n  const body    = (item.json.text || item.json.snippet || '').toLowerCase();\n  \n  // 排除自动回复\n  const isAutoReply = [\n    'out of office', 'auto-reply', 'automatic reply',\n    'vacation', 'away from', 'noreply',\n  ].some(kw => subject.includes(kw) || body.includes(kw));\n  \n  if (isAutoReply) return false;\n  \n  // 检测正面回复意向\n  const positiveSignals = [\n    'interested', 'yes', 'sure', 'please', 'tell me more',\n    'call', 'meeting', 'schedule', 'demo', 'price', 'cost',\n    'how much', 'magkano', 'tara', 'ok', 'pwede',\n  ];\n  const hasPositive = positiveSignals.some(kw => body.includes(kw));\n  return true; // 返回所有未读邮件，在下一节点分类\n});\n\nconsole.log(`Emails to process: ${replies.length}`);\nreturn replies.slice(0, 20);"
+      },
+      "id": "filter-replies",
+      "name": "Filter & Parse Replies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gemini-2.0-flash",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Classify this email reply from a Philippine business:\n\nFrom: {{ $json.from }}\nSubject: {{ $json.subject }}\nBody: {{ $json.text || $json.snippet }}\n\nReturn JSON only:\n{\"intent\": \"interested|not_interested|auto_reply|unsubscribe|other\", \"sentiment\": \"positive|neutral|negative\", \"suggested_action\": \"schedule_call|send_followup|remove_from_list|no_action\", \"urgency\": \"high|medium|low\", \"summary\": \"one line summary\"}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "classify-intent",
+      "name": "Classify Intent (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gemini-cred",
+          "name": "Gemini API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const email    = $('Filter & Parse Replies').item.json;\nconst rawReply = $input.item.json.text || $input.item.json.response || '{}';\n\nlet classification = {};\ntry {\n  const jsonStart = rawReply.indexOf('{');\n  const jsonEnd   = rawReply.lastIndexOf('}') + 1;\n  if (jsonStart >= 0) classification = JSON.parse(rawReply.slice(jsonStart, jsonEnd));\n} catch(e) {\n  classification = { intent: 'other', sentiment: 'neutral', suggested_action: 'no_action' };\n}\n\nreturn [{\n  json: {\n    email_id:         email.uid || email.id || \"unknown\",\n    from:             email.from,\n    subject:          email.subject,\n    intent:           classification.intent,\n    sentiment:        classification.sentiment,\n    suggested_action: classification.suggested_action,\n    urgency:          classification.urgency,\n    summary:          classification.summary,\n    timestamp:        new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "parse-classification",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "interested",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "route-intent",
+      "name": "Is Interested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://sales-outreach:8080/webhook/hot-lead",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "from",
+              "value": "={{ $json.from }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "intent",
+              "value": "={{ $json.intent }}"
+            },
+            {
+              "name": "urgency",
+              "value": "={{ $json.urgency }}"
+            },
+            {
+              "name": "suggested_action",
+              "value": "={{ $json.suggested_action }}"
+            },
+            {
+              "name": "summary",
+              "value": "={{ $json.summary }}"
+            }
+          ]
+        }
+      },
+      "id": "alert-hot-lead",
+      "name": "Alert: Hot Lead!",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        220
+      ],
+      "notes": "替换为 Telegram Bot 或 Slack 推送紧急通知"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://lead-miner:8000/leads/update-status",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $('Parse Classification').item.json.from }}"
+            },
+            {
+              "name": "status",
+              "value": "={{ $('Parse Classification').item.json.intent }}"
+            }
+          ]
+        }
+      },
+      "id": "update-outreach-log",
+      "name": "Update outreach_log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        560
+      ],
+      "continueOnFail": true,
+      "notes": "更新 outreach_log.status 字段记录回复状态"
+    }
+  ],
+  "connections": {
+    "Check Every 2 Hours": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unread Email (IMAP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Parse Replies": {
+      "main": [
+        [
+          {
+            "node": "Classify Intent (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Intent (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Is Interested?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Interested?": {
+      "main": [
+        [
+          {
+            "node": "Alert: Hot Lead!",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update outreach_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert: Hot Lead!": {
+      "main": [
+        [
+          {
+            "node": "Update outreach_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unread Email (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Filter & Parse Replies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  },
+  "tags": [],
+  "meta": {
+    "description": "每2小时检查未读邮件，用 Gemini 分类回复意向，热门线索立即推送告警"
+  },
+  "id": "357b1ca7-4294-4f04-81ad-63200eb64b7f"
+}

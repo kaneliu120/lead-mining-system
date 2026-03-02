@@ -1,0 +1,103 @@
+{
+  "name": "02 - Lead Enrichment (Gemini AI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "enrich-trigger",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://lead-miner:8000/enrich",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": 50
+            },
+            {
+              "name": "min_score",
+              "value": 50
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "enrich-batch",
+      "name": "Enrich via Gemini (/enrich)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "notes": "直接对 DB 中未富化线索调用 Gemini，不消耗 Serper/Apollo 配额"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.item.json;\nconst summary = {\n  enriched:    result.enriched,\n  total_input: result.total_input,\n  message:     result.message,\n  timestamp:   new Date().toISOString(),\n};\nconsole.log('Enrichment done:', JSON.stringify(summary));\nreturn [{ json: summary }];"
+      },
+      "id": "log-enrich-result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Enrich via Gemini (/enrich)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich via Gemini (/enrich)": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true
+  },
+  "tags": [],
+  "meta": {
+    "description": "每6小时将 DB 中未富化线索批量提交 Gemini 2.0 Flash 深度分析评分，无需重新采集"
+  },
+  "id": "971eaf99-fd28-4256-92e6-08da9920a089"
+}

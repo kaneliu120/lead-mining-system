@@ -1,0 +1,217 @@
+{
+  "name": "03 - Sales Outreach (LangGraph Automation)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "outreach-trigger",
+      "name": "Weekdays 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ],
+      "notes": "工作日早上9点触发外展任务（菲律宾时区 PHT = UTC+8）"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 外展配置\nreturn [{\n  json: {\n    limit: 20,\n    min_score: 65,\n    industry_keyword: null,\n    dry_run: false\n  }\n}];"
+      },
+      "id": "outreach-config",
+      "name": "Outreach Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://sales-outreach:8080/outreach/run",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "={{ $json.limit }}"
+            },
+            {
+              "name": "min_score",
+              "value": "={{ $json.min_score }}"
+            },
+            {
+              "name": "industry_keyword",
+              "value": "={{ $json.industry_keyword }}"
+            },
+            {
+              "name": "dry_run",
+              "value": "={{ $json.dry_run }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "trigger-outreach",
+      "name": "Trigger Outreach Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.sent }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-sent",
+      "name": "Any Emails Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://sales-outreach:8080/webhook/outreach-summary",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sent",
+              "value": "={{ $('Trigger Outreach Engine').item.json.sent }}"
+            },
+            {
+              "name": "skipped",
+              "value": "={{ $('Trigger Outreach Engine').item.json.skipped }}"
+            },
+            {
+              "name": "failed",
+              "value": "={{ $('Trigger Outreach Engine').item.json.failed }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now }}"
+            }
+          ]
+        }
+      },
+      "id": "notify-success",
+      "name": "Notify: Emails Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        220
+      ],
+      "notes": "可替换为 Telegram Bot 或 Slack Webhook 发送通知"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $('Trigger Outreach Engine').item.json;\nconsole.log('No emails sent today. Skipped:', result.skipped, 'Failed:', result.failed);\nreturn [{ json: { status: 'no_emails', ...result } }];"
+      },
+      "id": "log-no-send",
+      "name": "Log: No Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Weekdays 9AM": {
+      "main": [
+        [
+          {
+            "node": "Outreach Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outreach Config": {
+      "main": [
+        [
+          {
+            "node": "Trigger Outreach Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Outreach Engine": {
+      "main": [
+        [
+          {
+            "node": "Any Emails Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Emails Sent?": {
+      "main": [
+        [
+          {
+            "node": "Notify: Emails Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: No Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "meta": {
+    "description": "工作日上午9点自动运行 LangGraph 外展流程：RAG检索 → 联系人查询 → Gemini邮件生成 → SMTP发送"
+  },
+  "id": "43cff21e-094b-410b-94bb-09fff6e3592a"
+}

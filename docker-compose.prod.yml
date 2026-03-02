@@ -1,0 +1,109 @@
+# 生产环境 docker-compose — 使用 GHCR 预构建镜像（GitHub Actions CI/CD 推送）
+# 使用方式：docker compose -f docker-compose.prod.yml up -d
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB:-leads}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/chroma/.chroma/index
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lead-miner:
+    image: ghcr.io/kaneliu120/lead-mining-system/lead-miner:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leads}
+      CHROMA_HOST:  chromadb
+      CHROMA_PORT:  "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    ports:
+      - "8010:8000"
+    volumes:
+      - ./lead-mining-engine/config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  sales-outreach:
+    image: ghcr.io/kaneliu120/lead-mining-system/sales-outreach:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LEAD_MINER_URL: http://lead-miner:8000
+      DATABASE_URL:   postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leads}
+    depends_on:
+      lead-miner:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  n8n:
+    image: n8nio/n8n:2.9.4
+    restart: unless-stopped
+    environment:
+      N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_JWT_SECRET:-n8n-super-secret-jwt-key-2024}
+      N8N_OWNER_EMAIL:                ${N8N_OWNER_EMAIL:-admin@leadminer.local}
+      N8N_OWNER_FIRST_NAME:           ${N8N_OWNER_FIRST_NAME:-Admin}
+      N8N_OWNER_LAST_NAME:            ${N8N_OWNER_LAST_NAME:-User}
+      N8N_OWNER_PASSWORD:             ${N8N_OWNER_PASSWORD:-LeadMiner2024!}
+      N8N_PUBLIC_API_DISABLED:        "false"
+      WEBHOOK_URL:                    ${WEBHOOK_URL:-http://localhost:5678}
+      N8N_EDITOR_BASE_URL:            ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      DB_TYPE:                        postgresdb
+      DB_POSTGRESDB_HOST:             postgres
+      DB_POSTGRESDB_PORT:             5432
+      DB_POSTGRESDB_DATABASE:         ${POSTGRES_DB:-leads}
+      DB_POSTGRESDB_USER:             ${POSTGRES_USER:-postgres}
+      DB_POSTGRESDB_PASSWORD:         ${POSTGRES_PASSWORD:-postgres}
+      DB_POSTGRESDB_SCHEMA:           n8n
+      LEAD_MINER_URL:                 http://lead-miner:8000
+      GEMINI_API_KEY:                 ${GEMINI_API_KEY}
+      N8N_LOG_LEVEL:                  info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/workflows:ro
+    ports:
+      - "5678:5678"
+
+volumes:
+  postgres_data:
+  chroma_data:
+  n8n_data:
+
+networks:
+  default:
+    name: lead-mining-net

@@ -1,0 +1,136 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB:       ${POSTGRES_DB:-leads}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  # ── ChromaDB ────────────────────────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/chroma/.chroma/index
+    environment:
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ""
+      CHROMA_SERVER_AUTHN_PROVIDER:    ""
+    ports:
+      - "8002:8000"   # 8001 被其他项目占用，改用 8002
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Lead Mining Engine ──────────────────────────────────────────────────────
+  lead-miner:
+    build:
+      context: ./lead-mining-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leads}
+      CHROMA_HOST:  chromadb
+      CHROMA_PORT:  "8000"           # 容器内端口
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    ports:
+      - "8010:8000"  # 宿主机 8010 → 容器内 8000，避免与其他项目充突
+    volumes:
+      - ./lead-mining-engine/config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Sales Outreach Engine ───────────────────────────────────────────────────
+  sales-outreach:
+    build:
+      context: ./sales-outreach-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LEAD_MINER_URL: http://lead-miner:8000
+      DATABASE_URL:   postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leads}
+    depends_on:
+      lead-miner:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  # ── n8n ─────────────────────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:2.9.4
+    restart: unless-stopped
+    environment:
+      # n8n 2.x 认证 — 首次启动自动创建 Owner 账户（无需手动 Setup Wizard）
+      N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_JWT_SECRET:-n8n-super-secret-jwt-key-2024}
+      N8N_OWNER_EMAIL:                ${N8N_OWNER_EMAIL:-admin@leadminer.local}
+      N8N_OWNER_FIRST_NAME:           ${N8N_OWNER_FIRST_NAME:-Admin}
+      N8N_OWNER_LAST_NAME:            ${N8N_OWNER_LAST_NAME:-User}
+      N8N_OWNER_PASSWORD:             ${N8N_OWNER_PASSWORD:-LeadMiner2024!}
+      # 公开 REST API（用于工作流测试）
+      N8N_PUBLIC_API_DISABLED:        "false"
+      # Webhook 回调地址
+      WEBHOOK_URL:                    ${WEBHOOK_URL:-http://localhost:5678}
+      N8N_EDITOR_BASE_URL:            ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      # 数据库 — 使用已有 PostgreSQL（独立 schema 避免冲突）
+      DB_TYPE:                        postgresdb
+      DB_POSTGRESDB_HOST:             postgres
+      DB_POSTGRESDB_PORT:             5432
+      DB_POSTGRESDB_DATABASE:         ${POSTGRES_DB:-leads}
+      DB_POSTGRESDB_USER:             ${POSTGRES_USER:-postgres}
+      DB_POSTGRESDB_PASSWORD:         ${POSTGRES_PASSWORD:-postgres}
+      DB_POSTGRESDB_SCHEMA:           n8n
+      # 传递给工作流 HTTP 节点可用的变量
+      LEAD_MINER_URL:                 http://lead-miner:8000
+      GEMINI_API_KEY:                 ${GEMINI_API_KEY}
+      # 日志
+      N8N_LOG_LEVEL:                  info
+      N8N_LOG_OUTPUT:                 console
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/workflows:ro   # 供 CLI import 读取，非自动加载
+    ports:
+      - "5678:5678"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  chroma_data:
+  n8n_data:
+
+networks:
+  default:
+    name: lead-mining-net

@@ -1,0 +1,135 @@
+{
+  "name": "01 - Lead Mining (Daily Trigger)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const keywords = [\n  { keyword: 'restaurant', location: 'Manila, Philippines' },\n  { keyword: 'retail store', location: 'Cebu City, Philippines' },\n  { keyword: 'hotel', location: 'Davao City, Philippines' },\n  { keyword: 'salon beauty', location: 'Quezon City, Philippines' },\n  { keyword: 'bakery', location: 'Makati, Philippines' },\n];\nreturn keywords.map(k => ({ json: k }));"
+      },
+      "id": "keyword-list",
+      "name": "Keyword List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://lead-miner:8000/mine",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "keyword",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location }}"
+            },
+            {
+              "name": "limit",
+              "value": 100
+            },
+            {
+              "name": "enrich",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "call-mine-api",
+      "name": "Call /mine API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.item.json;\nconst summary = {\n  keyword: $('Keyword List').item.json.keyword,\n  location: $('Keyword List').item.json.location,\n  total_mined: result.total,\n  dedup_removed: result.dedup_removed,\n  sources: result.source_counts,\n  errors: result.errors,\n  duration_sec: result.duration_sec,\n  timestamp: new Date().toISOString(),\n};\nconsole.log('Mining done:', JSON.stringify(summary));\nreturn [{ json: summary }];"
+      },
+      "id": "log-result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily at 8AM": {
+      "main": [
+        [
+          {
+            "node": "Keyword List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword List": {
+      "main": [
+        [
+          {
+            "node": "Call /mine API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call /mine API": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [],
+  "meta": {
+    "description": "每日触发 Lead Mining Engine 采集菲律宾 SME 数据，写入 PostgreSQL + ChromaDB"
+  },
+  "id": "7e20d1b3-6adf-4e0c-8c6a-0e8b9a7beeb0"
+}
