@@ -93,6 +93,7 @@ services:
       N8N_PROTOCOL:                   ${N8N_PROTOCOL:-https}
       # Cookie 安全（HTTP 访问时必须设 false；如果配了 HTTPS 可删除此行）
       N8N_SECURE_COOKIE:              "true"
+      N8N_PROXY_HOPS:                 "1"        # 信任 nginx 传入的 X-Forwarded-For
       N8N_LOG_LEVEL:                  info
     depends_on:
       postgres:

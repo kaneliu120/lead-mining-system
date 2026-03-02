@@ -111,6 +111,7 @@ services:
       # n8n 运行在 nginx HTTPS 反向代理之后，需要告知协议为 https
       N8N_PROTOCOL:                   "https"
       N8N_SECURE_COOKIE:              "true"
+      N8N_PROXY_HOPS:                 "1"        # 信任 nginx 传入的 X-Forwarded-For
       # 日志
       N8N_LOG_LEVEL:                  info
       N8N_LOG_OUTPUT:                 console
