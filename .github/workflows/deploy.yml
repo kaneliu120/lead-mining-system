@@ -116,13 +116,10 @@ jobs:
           script: |
             cd /opt/lead-mining-system
 
-            # 若 workflow_dispatch 传入了自定义域名则使用，否则自动生成 nip.io
+            # workflow_dispatch 可传入自定义域名，默认使用 myskillstore.run
             CUSTOM_DOMAIN="${{ github.event.inputs.domain }}"
-            if [ -n "$CUSTOM_DOMAIN" ]; then
-              bash scripts/setup-ssl.sh "$CUSTOM_DOMAIN"
-            else
-              bash scripts/setup-ssl.sh
-            fi
+            TARGET_DOMAIN="${CUSTOM_DOMAIN:-myskillstore.run}"
+            bash scripts/setup-ssl.sh "$TARGET_DOMAIN"
 
       - name: Import n8n workflows
         uses: appleboy/ssh-action@v1.0.3
