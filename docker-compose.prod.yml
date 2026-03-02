@@ -72,11 +72,11 @@ services:
     image: n8nio/n8n:2.9.4
     restart: unless-stopped
     environment:
-      N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_JWT_SECRET:-n8n-super-secret-jwt-key-2024}
+      N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_JWT_SECRET}
       N8N_OWNER_EMAIL:                ${N8N_OWNER_EMAIL:-admin@leadminer.local}
       N8N_OWNER_FIRST_NAME:           ${N8N_OWNER_FIRST_NAME:-Admin}
       N8N_OWNER_LAST_NAME:            ${N8N_OWNER_LAST_NAME:-User}
-      N8N_OWNER_PASSWORD:             ${N8N_OWNER_PASSWORD:-LeadMiner2024!}
+      N8N_OWNER_PASSWORD:             ${N8N_OWNER_PASSWORD}
       N8N_PUBLIC_API_DISABLED:        "false"
       WEBHOOK_URL:                    ${WEBHOOK_URL:-http://localhost:5678}
       N8N_EDITOR_BASE_URL:            ${N8N_EDITOR_BASE_URL:-http://localhost:5678}

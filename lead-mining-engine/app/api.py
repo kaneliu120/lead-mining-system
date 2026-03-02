@@ -88,15 +88,18 @@ app.add_middleware(RateLimitMiddleware, enabled=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 管理员认证 — 基于 HMAC 签名 Cookie
-# 设置环境变量 ADMIN_PASSWORD 修改登录密码（默认 lead@Admin2025）
-# 设置环境变量 ADMIN_SECRET 修改签名密钥
+# 设置环境变量 ADMIN_PASSWORD 修改登录密码（必填，无默认值）
+# 设置环境变量 ADMIN_SECRET 修改签名密钥（必填，无默认值）
 # ══════════════════════════════════════════════════════════════════════════════
-_ADMIN_SECRET   = os.environ.get("ADMIN_SECRET",   "changeme-replace-in-production-secret")
-_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lead@Admin2025")
+_ADMIN_SECRET   = os.environ.get("ADMIN_SECRET",   "")
+_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+if not _ADMIN_SECRET:
+    raise RuntimeError("ADMIN_SECRET 环境变量未设置，拒绝启动")
+if not _ADMIN_PASSWORD:
+    raise RuntimeError("ADMIN_PASSWORD 环境变量未设置，拒绝启动")
 _SESSION_COOKIE   = "admin_session"
 _SESSION_TTL      = 86400  # 24 小时
-_DEMO_FLAG_COOKIE = "lead_demo"
-_DEMO_TOKEN_VALUE = "demo_readonly_1"     # fixed value for read-only demo
 
 
 def _make_session_token() -> str:
@@ -144,12 +147,8 @@ input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2
 .btn-login{{width:100%;background:#1d4ed8;color:#fff;border:none;border-radius:8px;
   padding:11px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s;margin-bottom:10px}}
 .btn-login:hover{{background:#1e40af}}
-.btn-demo{{width:100%;background:transparent;color:#94a3b8;border:1px solid #334155;
-  border-radius:8px;padding:9px;font-size:.85rem;font-weight:500;cursor:pointer;transition:all .2s}}
-.btn-demo:hover{{background:#0f172a;color:#e2e8f0;border-color:#64748b}}
 .err{{background:#3b1f1f;color:#fca5a5;border-radius:8px;padding:10px 14px;
   font-size:.82rem;margin-bottom:16px;display:none}}
-.demo-note{{font-size:.72rem;color:#475569;text-align:center;margin-top:8px}}
 .lang-row{{display:flex;justify-content:flex-end;margin-bottom:18px;gap:6px}}
 .lang-btn{{background:#0f172a;border:1px solid #334155;color:#64748b;border-radius:6px;
   padding:3px 10px;font-size:.72rem;cursor:pointer;transition:all .2s}}
@@ -171,15 +170,11 @@ input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2
     <input type="password" name="password" id="pw-input" placeholder="Enter password…" autofocus required>
     <button type="submit" class="btn-login" id="btn-submit">Log In</button>
   </form>
-  <form method="POST" action="/demo-login" style="margin-top:0">
-    <button type="submit" class="btn-demo" id="btn-demo">&#128065; Demo Preview</button>
-  </form>
-  <div class="demo-note" id="demo-note">Read-only demo &middot; No password required</div>
 </div>
 <script>
-const _LL={{en:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',demo:'&#128065; Demo Preview',note:'Read-only demo \u00b7 No password required',errWrong:'Incorrect password, please try again'}},zh:{{sub:'控制台登录',pwLabel:'管理员密码',pwPlaceholder:'请输入密码\u2026',submit:'登录',demo:'&#128065; 演示预览',note:'只读演示 \u00b7 无需密码',errWrong:'密码错误，请重试'}}}};
+const _LL={{en:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',errWrong:'Incorrect password, please try again'}},zh:{{sub:'控制台登录',pwLabel:'管理员密码',pwPlaceholder:'请输入密码\u2026',submit:'登录',errWrong:'密码错误，请重试'}}}};
 let _loginLang=localStorage.getItem('lang')||'en';
-function loginSetLang(l){{_loginLang=l;localStorage.setItem('lang',l);const d=_LL[l]||_LL.en;document.getElementById('login-sub').textContent=d.sub;document.getElementById('pw-label').textContent=d.pwLabel;document.getElementById('pw-input').placeholder=d.pwPlaceholder;document.getElementById('btn-submit').textContent=d.submit;document.getElementById('btn-demo').textContent=d.demo;document.getElementById('demo-note').textContent=d.note;document.getElementById('login-btn-en').classList.toggle('active',l==='en');document.getElementById('login-btn-zh').classList.toggle('active',l==='zh');const errEl=document.getElementById('loginErr');if(errEl&&errEl.dataset.show)errEl.textContent=d.errWrong;}}
+function loginSetLang(l){{_loginLang=l;localStorage.setItem('lang',l);const d=_LL[l]||_LL.en;document.getElementById('login-sub').textContent=d.sub;document.getElementById('pw-label').textContent=d.pwLabel;document.getElementById('pw-input').placeholder=d.pwPlaceholder;document.getElementById('btn-submit').textContent=d.submit;document.getElementById('login-btn-en').classList.toggle('active',l==='en');document.getElementById('login-btn-zh').classList.toggle('active',l==='zh');const errEl=document.getElementById('loginErr');if(errEl&&errEl.dataset.show)errEl.textContent=d.errWrong;}}
 loginSetLang(_loginLang);
 </script>
 </body></html>"""
@@ -807,10 +802,9 @@ async def _restore_db_settings():
 @app.get("/", include_in_schema=False)
 async def root_redirect(
     session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
-    demo:    Optional[str] = Cookie(None, alias=_DEMO_FLAG_COOKIE),
 ):
     """根路径：已登录 → /admin，未登录 → /login"""
-    if _verify_session(session) or demo == _DEMO_TOKEN_VALUE:
+    if _verify_session(session):
         return RedirectResponse(url="/admin", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
@@ -835,21 +829,15 @@ async def do_login(request: Request):
     resp.set_cookie(
         _SESSION_COOKIE, token,
         httponly=True, samesite="lax",
-        max_age=_SESSION_TTL, secure=False,
+        max_age=_SESSION_TTL, secure=True,
     )
     return resp
 
 
 @app.post("/demo-login", include_in_schema=False)
-async def demo_login():
-    """Demo 预览：设置只读 cookie，跳转到 /admin（所有写操作被前端禁用）"""
-    resp = RedirectResponse(url="/admin", status_code=302)
-    resp.set_cookie(
-        _DEMO_FLAG_COOKIE, _DEMO_TOKEN_VALUE,
-        httponly=True, samesite="lax",
-        max_age=3600, secure=False,  # 1-hour demo session
-    )
-    return resp
+async def demo_login_disabled():
+    """Demo 入口已关闭，重定向到登录页"""
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/logout", include_in_schema=False)
@@ -857,22 +845,18 @@ async def logout():
     """退出登录并清除 session cookie"""
     resp = RedirectResponse(url="/login", status_code=302)
     resp.delete_cookie(_SESSION_COOKIE)
-    resp.delete_cookie(_DEMO_FLAG_COOKIE)
     return resp
 
 
 @app.get("/admin", response_class=HTMLResponse, tags=["Admin"])
 async def admin_panel(
     session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
-    demo:    Optional[str] = Cookie(None, alias=_DEMO_FLAG_COOKIE),
 ):
     """⚡ Lead Mining 综合管理控制台"""
     is_admin = _verify_session(session)
-    is_demo  = (demo == _DEMO_TOKEN_VALUE)
-    if not is_admin and not is_demo:
+    if not is_admin:
         return RedirectResponse(url="/login", status_code=302)
-    demo_js  = "window.DEMO=true;" if (is_demo and not is_admin) else "window.DEMO=false;"
-    _html = _ADMIN_HTML.replace("/*__DEMO_INIT__*/", demo_js)
+    _html = _ADMIN_HTML.replace("/*__DEMO_INIT__*/", "window.DEMO=false;")
     return _html
 
 
