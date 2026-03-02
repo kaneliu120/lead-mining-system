@@ -68,6 +68,7 @@ docker run --rm \
   -d "n8n.${DOMAIN}" \
   -d "mine.${DOMAIN}" \
   -d "outreach.${DOMAIN}" \
+  -d "${DOMAIN}" \
   --cert-name "lead-mining" \
   || {
     echo "⚠️  SSL 申请失败（可能是首次或 nip.io 限速），切换到仅 HTTP 模式"
@@ -126,7 +127,7 @@ else
 # ── HTTP → HTTPS 强制跳转 + ACME challenge ───────────────────────────────────
 server {
     listen 80;
-    server_name n8n.${DOMAIN} mine.${DOMAIN} outreach.${DOMAIN};
+    server_name n8n.${DOMAIN} mine.${DOMAIN} outreach.${DOMAIN} ${DOMAIN};
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 301 https://\$host\$request_uri; }
 }
@@ -191,6 +192,15 @@ server {
         proxy_read_timeout 120;
     }
 }
+
+# ── 根域名 → n8n 跳转 ────────────────────────────────────────────────────────
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+    ssl_certificate     /etc/letsencrypt/live/lead-mining/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/lead-mining/privkey.pem;
+    return 301 https://n8n.${DOMAIN}\$request_uri;
+}
 NGINXEOF
   echo "✅ 已生成 HTTPS 配置"
 
@@ -218,5 +228,6 @@ else
 echo "║  🔄 n8n 工作流     https://n8n.${DOMAIN}"
 echo "║  🎛️  采集控制台   https://mine.${DOMAIN}/admin"
 echo "║  📤 外展 API      https://outreach.${DOMAIN}"
+echo "║  🌐 主域名        https://${DOMAIN} → n8n"
 fi
 echo "╚══════════════════════════════════════════════════════════╝"
