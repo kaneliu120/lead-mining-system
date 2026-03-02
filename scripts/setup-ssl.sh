@@ -53,7 +53,12 @@ docker compose -f docker-compose.prod.yml up -d nginx
 sleep 3
 
 # 申请包含三个子域名的单张证书
-docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+# 注意: 使用 docker run 而非 docker compose run，避免 service entrypoint 的无限续期循环阻塞
+docker run --rm \
+  -v lead-mining-system_certbot_www:/var/www/certbot \
+  -v lead-mining-system_certbot_certs:/etc/letsencrypt \
+  --network lead-mining-net \
+  certbot/certbot certonly \
   --webroot \
   --webroot-path /var/www/certbot \
   --email "kaneliu10@gmail.com" \
