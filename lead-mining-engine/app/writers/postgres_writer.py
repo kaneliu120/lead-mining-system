@@ -97,6 +97,13 @@ CREATE TABLE IF NOT EXISTS score_feedback (
 
 CREATE INDEX IF NOT EXISTS idx_score_feedback_lead    ON score_feedback(lead_id);
 CREATE INDEX IF NOT EXISTS idx_score_feedback_outcome ON score_feedback(outcome);
+
+-- 面板配置持久化表（API Key、Miner 开关等）
+CREATE TABLE IF NOT EXISTS app_settings (
+    key         TEXT        PRIMARY KEY,
+    value       TEXT        NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -364,6 +371,42 @@ class PostgresWriter:
         if self._pool:
             await self._pool.close()
             logger.info("PostgresWriter pool closed")
+
+    # ── 管理面板：app_settings CRUD ─────────────────────────────────────────
+
+    async def get_setting(self, key: str, default: str = "") -> str:
+        """读取单个配置项"""
+        if self._pool is None:
+            return default
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT value FROM app_settings WHERE key = $1", key
+            )
+        return row["value"] if row else default
+
+    async def set_setting(self, key: str, value: str) -> None:
+        """写入/更新单个配置项（UPSERT）"""
+        if self._pool is None:
+            raise RuntimeError("PostgresWriter not connected")
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (key) DO UPDATE
+                    SET value = EXCLUDED.value, updated_at = NOW()
+                """,
+                key,
+                value,
+            )
+
+    async def get_all_settings(self) -> dict:
+        """读取所有配置项，返回 {key: value} 字典"""
+        if self._pool is None:
+            return {}
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT key, value FROM app_settings")
+        return {row["key"]: row["value"] for row in rows}
 
     # ── P2-5 反馈与评分统计 ─────────────────────────────────────────────────
 
