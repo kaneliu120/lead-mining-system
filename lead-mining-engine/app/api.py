@@ -93,8 +93,10 @@ app.add_middleware(RateLimitMiddleware, enabled=True)
 # ══════════════════════════════════════════════════════════════════════════════
 _ADMIN_SECRET   = os.environ.get("ADMIN_SECRET",   "changeme-replace-in-production-secret")
 _ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "lead@Admin2025")
-_SESSION_COOKIE = "admin_session"
-_SESSION_TTL    = 86400  # 24 小时
+_SESSION_COOKIE   = "admin_session"
+_SESSION_TTL      = 86400  # 24 小时
+_DEMO_FLAG_COOKIE = "lead_demo"
+_DEMO_TOKEN_VALUE = "demo_readonly_1"     # fixed value for read-only demo
 
 
 def _make_session_token() -> str:
@@ -121,11 +123,11 @@ def _verify_session(token: str | None) -> bool:
 
 
 _LOGIN_HTML = """<!DOCTYPE html>
-<html lang="zh">
+<html lang="en" id="login-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Lead Mining 控制台 — 登录</title>
+<title>Lead Mining Console — Login</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -139,24 +141,47 @@ label{{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:6px}}
 input[type=password]{{width:100%;background:#0f172a;border:1px solid #334155;
   border-radius:8px;padding:10px 14px;color:#e2e8f0;font-size:.9rem;margin-bottom:20px}}
 input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2px rgba(56,189,248,.2)}}
-button{{width:100%;background:#1d4ed8;color:#fff;border:none;border-radius:8px;
-  padding:11px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s}}
-button:hover{{background:#1e40af}}
+.btn-login{{width:100%;background:#1d4ed8;color:#fff;border:none;border-radius:8px;
+  padding:11px;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .2s;margin-bottom:10px}}
+.btn-login:hover{{background:#1e40af}}
+.btn-demo{{width:100%;background:transparent;color:#94a3b8;border:1px solid #334155;
+  border-radius:8px;padding:9px;font-size:.85rem;font-weight:500;cursor:pointer;transition:all .2s}}
+.btn-demo:hover{{background:#0f172a;color:#e2e8f0;border-color:#64748b}}
 .err{{background:#3b1f1f;color:#fca5a5;border-radius:8px;padding:10px 14px;
   font-size:.82rem;margin-bottom:16px;display:none}}
+.demo-note{{font-size:.72rem;color:#475569;text-align:center;margin-top:8px}}
+.lang-row{{display:flex;justify-content:flex-end;margin-bottom:18px;gap:6px}}
+.lang-btn{{background:#0f172a;border:1px solid #334155;color:#64748b;border-radius:6px;
+  padding:3px 10px;font-size:.72rem;cursor:pointer;transition:all .2s}}
+.lang-btn.active{{background:#1d4ed8;border-color:#1d4ed8;color:#fff}}
+.lang-btn:hover:not(.active){{background:#334155;color:#e2e8f0}}
 </style>
 </head>
 <body>
 <div class="card">
+  <div class="lang-row">
+    <button class="lang-btn active" id="login-btn-en" onclick="loginSetLang('en')">EN</button>
+    <button class="lang-btn" id="login-btn-zh" onclick="loginSetLang('zh')">中文</button>
+  </div>
   <div class="logo">&#9889; Lead Mining</div>
-  <div class="sub">控制台登录</div>
+  <div class="sub" id="login-sub">Console Login</div>
   {err_block}
   <form method="POST" action="/login">
-    <label>管理员密码</label>
-    <input type="password" name="password" placeholder="请输入密码…" autofocus required>
-    <button type="submit">登录</button>
+    <label id="pw-label">Admin Password</label>
+    <input type="password" name="password" id="pw-input" placeholder="Enter password…" autofocus required>
+    <button type="submit" class="btn-login" id="btn-submit">Log In</button>
   </form>
+  <form method="POST" action="/demo-login" style="margin-top:0">
+    <button type="submit" class="btn-demo" id="btn-demo">&#128065; Demo Preview</button>
+  </form>
+  <div class="demo-note" id="demo-note">Read-only demo &middot; No password required</div>
 </div>
+<script>
+const _LL={{en:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',demo:'&#128065; Demo Preview',note:'Read-only demo \u00b7 No password required',errWrong:'Incorrect password, please try again'}},zh:{{sub:'控制台登录',pwLabel:'管理员密码',pwPlaceholder:'请输入密码\u2026',submit:'登录',demo:'&#128065; 演示预览',note:'只读演示 \u00b7 无需密码',errWrong:'密码错误，请重试'}}}};
+let _loginLang=localStorage.getItem('lang')||'en';
+function loginSetLang(l){{_loginLang=l;localStorage.setItem('lang',l);const d=_LL[l]||_LL.en;document.getElementById('login-sub').textContent=d.sub;document.getElementById('pw-label').textContent=d.pwLabel;document.getElementById('pw-input').placeholder=d.pwPlaceholder;document.getElementById('btn-submit').textContent=d.submit;document.getElementById('btn-demo').textContent=d.demo;document.getElementById('demo-note').textContent=d.note;document.getElementById('login-btn-en').classList.toggle('active',l==='en');document.getElementById('login-btn-zh').classList.toggle('active',l==='zh');const errEl=document.getElementById('loginErr');if(errEl&&errEl.dataset.show)errEl.textContent=d.errWrong;}}
+loginSetLang(_loginLang);
+</script>
 </body></html>"""
 
 
@@ -466,13 +491,13 @@ async function load(){
     fetch('/leads?min_score=0&limit=15').then(r=>r.json()).catch(()=>({leads:[]}))
   ]);
   const s=stats.leads||{},o=stats.outreach||{};
-  document.getElementById('ts').textContent='最后更新: '+new Date().toLocaleTimeString('zh-CN');
+  document.getElementById('ts').textContent=t('lastUpd')+new Date().toLocaleTimeString(_lang==='zh'?'zh-CN':'en-US');
   document.getElementById('cards').innerHTML=[
-    {v:s.raw_total||0,l:'采集线索',s2:'全部 Raw'},
-    {v:s.enriched_total||0,l:'AI 富化',s2:'率 '+(s.enrichment_rate||'0%')},
+    {v:s.raw_total||0,l:t('cardRaw'),s2:t('cardRawSub')},
+    {v:s.enriched_total||0,l:t('cardEnr'),s2:t('cardEnrPre')+(s.enrichment_rate||'0%')},
     {v:+(s.avg_score||0).toFixed(1),l:'平均分数',s2:'满分 100'},
-    {v:s.high_score_70||0,l:'高意向 70+',s2:'优先外展'},
-    {v:o.emails_sent||0,l:'已发邮件',s2:'转化 '+(o.conversion_rate||'0%')},
+    {v:s.high_score_70||0,l:t('cardHigh'),s2:t('cardHighSub')},
+    {v:o.emails_sent||0,l:t('cardEmails'),s2:''},
     {v:s.raw_with_email||0,l:'含邮箱线索',s2:'可直接外展'},
   ].map(c=>`<div class="card"><div class="val">${c.v}</div><div class="lbl">${c.l}</div><div class="sub2">${c.s2}</div></div>`).join('');
   const fc=document.getElementById('fc');
@@ -779,9 +804,12 @@ async def _restore_db_settings():
 
 
 @app.get("/", include_in_schema=False)
-async def root_redirect(session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE)):
+async def root_redirect(
+    session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
+    demo:    Optional[str] = Cookie(None, alias=_DEMO_FLAG_COOKIE),
+):
     """根路径：已登录 → /admin，未登录 → /login"""
-    if _verify_session(session):
+    if _verify_session(session) or demo == _DEMO_TOKEN_VALUE:
         return RedirectResponse(url="/admin", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
@@ -789,7 +817,7 @@ async def root_redirect(session: Optional[str] = Cookie(None, alias=_SESSION_COO
 @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
 async def login_page():
     """管理员登录页"""
-    return _LOGIN_HTML.format(err_block="")
+    return _LOGIN_HTML.format(err_block='<div class="err" id="loginErr"></div>')
 
 
 @app.post("/login", include_in_schema=False)
@@ -798,7 +826,7 @@ async def do_login(request: Request):
     form = await request.form()
     password = str(form.get("password", ""))
     if not secrets.compare_digest(password, _ADMIN_PASSWORD):
-        err = '<div class="err" style="display:block">密码错误，请重试</div>'
+        err = '<div class="err" id="loginErr" data-show="1" style="display:block"></div>'
         html = _LOGIN_HTML.format(err_block=err)
         return HTMLResponse(content=html, status_code=401)
     token = _make_session_token()
@@ -811,23 +839,44 @@ async def do_login(request: Request):
     return resp
 
 
+@app.post("/demo-login", include_in_schema=False)
+async def demo_login():
+    """Demo 预览：设置只读 cookie，跳转到 /admin（所有写操作被前端禁用）"""
+    resp = RedirectResponse(url="/admin", status_code=302)
+    resp.set_cookie(
+        _DEMO_FLAG_COOKIE, _DEMO_TOKEN_VALUE,
+        httponly=True, samesite="lax",
+        max_age=3600, secure=False,  # 1-hour demo session
+    )
+    return resp
+
+
 @app.get("/logout", include_in_schema=False)
 async def logout():
     """退出登录并清除 session cookie"""
     resp = RedirectResponse(url="/login", status_code=302)
     resp.delete_cookie(_SESSION_COOKIE)
+    resp.delete_cookie(_DEMO_FLAG_COOKIE)
     return resp
 
 
 @app.get("/admin", response_class=HTMLResponse, tags=["Admin"])
 async def admin_panel(
     session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
+    demo:    Optional[str] = Cookie(None, alias=_DEMO_FLAG_COOKIE),
 ):
-    """⚡ Lead Mining 综合管理控制台"""  
-    if not _verify_session(session):
+    """⚡ Lead Mining 综合管理控制台"""
+    is_admin = _verify_session(session)
+    is_demo  = (demo == _DEMO_TOKEN_VALUE)
+    if not is_admin and not is_demo:
         return RedirectResponse(url="/login", status_code=302)
-    return """<!DOCTYPE html>
-<html lang="zh">
+    demo_js  = "window.DEMO=true;" if (is_demo and not is_admin) else "window.DEMO=false;"
+    _html = _ADMIN_HTML.replace("/*__DEMO_INIT__*/", demo_js)
+    return _html
+
+
+_ADMIN_HTML = """<!DOCTYPE html>
+<html lang="en" id="html-root">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -919,21 +968,38 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
 #toast{position:fixed;bottom:20px;right:20px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:12px 18px;font-size:.82rem;transform:translateY(60px);opacity:0;transition:all .3s;z-index:999}
 #toast.show{transform:translateY(0);opacity:1}
 .tab-panel{display:none}.tab-panel.active{display:block}
+/* Language switch */
+.lang-sw{display:flex;gap:5px}
+.lang-sw button{background:#0f172a;border:1px solid #334155;color:#64748b;border-radius:6px;padding:3px 10px;font-size:.72rem;cursor:pointer;transition:all .2s}
+.lang-sw button.active{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.lang-sw button:hover:not(.active){background:#334155;color:#e2e8f0}
+/* Demo banner */
+.demo-banner{background:#1e1a0e;border-bottom:1px solid #713f12;padding:7px 24px;display:none;align-items:center;gap:10px;font-size:.78rem;color:#fbbf24}
+.demo-banner.show{display:flex}
 </style>
 </head>
 <body>
+<div class="demo-banner" id="demo-banner">
+  <span>&#128065;</span>
+  <span id="demo-banner-text">Demo Mode — Read Only · Write operations are disabled</span>
+  <a href="/logout" id="demo-exit-link" style="margin-left:auto;color:#fbbf24;opacity:.8;font-size:.72rem;text-decoration:underline">Exit Demo</a>
+</div>
 <div class="header">
-  <h1>&#9889; Lead Mining 控制台 <span class="status-dot" id="htdot"></span></h1>
+  <h1><span id="hdr-title-text">⚡ Lead Mining Console</span> <span class="status-dot" id="htdot"></span></h1>
   <div style="display:flex;align-items:center;gap:12px">
-    <a href="/docs" target="_blank" style="font-size:.78rem;color:#64748b;text-decoration:none">API Docs ↗</a>
-    <a href="/logout" style="font-size:.78rem;color:#94a3b8;text-decoration:none;background:#1e293b;border:1px solid #334155;padding:4px 12px;border-radius:6px;transition:all .2s" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#1e293b'">退出登录</a>
+    <div class="lang-sw">
+      <button id="hdr-en" onclick="applyLang('en')">EN</button>
+      <button id="hdr-zh" onclick="applyLang('zh')">中文</button>
+    </div>
+    <a href="/docs" target="_blank" id="hdr-apidocs" style="font-size:.78rem;color:#64748b;text-decoration:none">API Docs ↗</a>
+    <a href="/logout" id="hdr-logout" style="font-size:.78rem;color:#94a3b8;text-decoration:none;background:#1e293b;border:1px solid #334155;padding:4px 12px;border-radius:6px;transition:all .2s" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#1e293b'">Log Out</a>
   </div>
 </div>
 <div class="tabs">
-  <div class="tab active" onclick="switchTab(0)">&#128200; 监控面板</div>
-  <div class="tab" onclick="switchTab(1)">&#9881; Miner 配置</div>
-  <div class="tab" onclick="switchTab(2)">&#128273; API Keys</div>
-  <div class="tab" onclick="switchTab(3)">&#128640; 立即采集</div>
+  <div class="tab active" id="tab0" onclick="switchTab(0)">&#128200; Monitor</div>
+  <div class="tab" id="tab1" onclick="switchTab(1)">&#9881; Miners</div>
+  <div class="tab" id="tab2" onclick="switchTab(2)">&#128273; API Keys</div>
+  <div class="tab" id="tab3" onclick="switchTab(3)">&#128640; Mine Now</div>
 </div>
 <div class="content">
   <!-- TAB 0: 监控面板 -->
@@ -941,12 +1007,12 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
     <p class="ts" id="ts0">加载中…</p>
     <div class="grid" id="cards"></div>
     <div class="charts">
-      <div class="chart-box"><h3>&#128200; 采集漏斗</h3><canvas id="fc" height="200"></canvas></div>
-      <div class="chart-box"><h3>&#11088; Top Leads 评分</h3><canvas id="sc" height="200"></canvas></div>
+      <div class="chart-box"><h3 id="chart-funnel-title">&#128200; Mining Funnel</h3><canvas id="fc" height="200"></canvas></div>
+      <div class="chart-box"><h3 id="chart-top-title">&#11088; Top Lead Scores</h3><canvas id="sc" height="200"></canvas></div>
     </div>
-    <div class="sec">&#128229; Top 20 高意向线索</div>
+    <div class="sec" id="table-title">&#128229; Top 20 High-Intent Leads</div>
     <table>
-      <thead><tr><th>#</th><th>公司</th><th>行业</th><th>地址</th><th>评分</th><th>邮箱</th><th>状态</th></tr></thead>
+      <thead><tr><th>#</th><th id="th-company">Company</th><th id="th-industry">Industry</th><th id="th-address">Address</th><th id="th-score">Score</th><th id="th-email">Email</th><th id="th-status">Status</th></tr></thead>
       <tbody id="ltb"></tbody>
     </table>
   </div>
@@ -954,47 +1020,107 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
   <!-- TAB 1: Miner 配置 -->
   <div class="tab-panel" id="tp1">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <span class="sec" style="margin:0">数据源管理</span>
-      <button class="btn btn-ghost btn-sm" onclick="loadSettings()">&#8635; 刷新</button>
+      <span class="sec" id="miners-title" style="margin:0">Data Source Management</span>
+      <button class="btn btn-ghost btn-sm" id="miners-refresh" onclick="loadSettings()">&#8635; Refresh</button>
     </div>
-    <div class="miner-grid" id="miner-grid">加载中…</div>
+    <div class="miner-grid" id="miner-grid">Loading…</div>
   </div>
 
   <!-- TAB 2: API Keys -->
   <div class="tab-panel" id="tp2">
     <div style="margin-bottom:14px">
-      <span class="sec" style="margin:0">API Key 管理</span>
-      <p style="font-size:.75rem;color:#475569;margin-top:4px">保存后立即生效，并持久化到数据库（重启后自动恢复）</p>
+      <span class="sec" id="apikeys-title" style="margin:0">API Key Management</span>
+      <p id="apikeys-sub" style="font-size:.75rem;color:#475569;margin-top:4px">Changes take effect immediately and persist to DB (restored after restart)</p>
     </div>
-    <div id="key-list">加载中…</div>
+    <div id="key-list">Loading…</div>
   </div>
 
-  <!-- TAB 3: 立即采集 -->
+  <!-- TAB 3: Mine Now -->
   <div class="tab-panel" id="tp3">
-    <div class="sec">手动触发采集任务</div>
+    <div class="sec" id="mine-section-title">Trigger Mining Task</div>
     <div class="form-row">
-      <div class="form-group"><label>关键词 (必填)</label><input type="text" id="m-kw" placeholder="restaurant, IT services, retail…"></div>
-      <div class="form-group"><label>地区</label><input type="text" id="m-loc" value="Philippines"></div>
+      <div class="form-group"><label id="lbl-kw">Keyword (required)</label><input type="text" id="m-kw" placeholder="restaurant, IT services, retail…"></div>
+      <div class="form-group"><label id="lbl-loc">Location</label><input type="text" id="m-loc" value="Philippines"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>最多条数 (1–500)</label><input type="number" id="m-limit" value="50" min="1" max="500"></div>
-      <div class="form-group"><label>数据源（留空=全部启用）</label><input type="text" id="m-src" placeholder="serper,hunter （逗号分隔）"></div>
+      <div class="form-group"><label id="lbl-limit">Max Count (1–500)</label><input type="number" id="m-limit" value="50" min="1" max="500"></div>
+      <div class="form-group"><label id="lbl-src">Sources (blank=all)</label><input type="text" id="m-src" placeholder="serper,hunter…"></div>
     </div>
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
       <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;color:#94a3b8">
-        <input type="checkbox" id="m-enrich" style="accent-color:#1d4ed8"> 立即 Gemini 富化
+        <input type="checkbox" id="m-enrich" style="accent-color:#1d4ed8"> <span id="lbl-enrich">Gemini Enrich</span>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;color:#94a3b8">
-        <input type="number" id="m-score" value="0" min="0" max="100" style="width:56px;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px 6px;color:#e2e8f0"> 最低评分过滤
+        <input type="number" id="m-score" value="0" min="0" max="100" style="width:56px;background:#0f172a;border:1px solid #334155;border-radius:4px;padding:3px 6px;color:#e2e8f0"> <span id="lbl-score">Min Score Filter</span>
       </label>
     </div>
-    <button class="btn btn-primary" onclick="startMine()" id="mine-btn">&#128640; 开始采集</button>
+    <button class="btn btn-primary" onclick="startMine()" id="mine-btn">&#128640; Start Mining</button>
     <div id="mine-result" class="result-box" style="display:none"></div>
   </div>
 </div>
 <div id="toast"></div>
 
 <script>
+/*__DEMO_INIT__*/
+// ── i18n ──────────────────────────────────────────────────────────────────
+const I18N={
+en:{title:'\u26a1 Lead Mining Console',tab0:'\U0001F4C8 Monitor',tab1:'\u2699\ufe0f Miners',tab2:'\U0001F511 API Keys',tab3:'\U0001F680 Mine Now',logout:'Log Out',loading:'Loading\u2026',lastUpd:'Last updated: ',cardRaw:'Raw Leads',cardRawSub:'All Raw',cardEnr:'AI Enriched',cardEnrPre:'Rate ',cardAvg:'Avg Score',cardAvgSub:'/ 100',cardHigh:'High Intent 70+',cardHighSub:'Priority Outreach',cardEmails:'Emails Sent',cardEmail:'Has Email',cardEmailSub:'Direct Outreach',chartFunnel:'\U0001F4C8 Mining Funnel',chartTop:'\u2b50 Top Lead Scores',funnelLabels:['Raw','Enriched','70+','Outreached'],tableTitle:'\U0001F4E5 Top 20 High-Intent Leads',colCompany:'Company',colIndustry:'Industry',colAddress:'Address',colScore:'Score',colEmail2:'Email',colStatus:'Status',noData:'No enriched data yet',outreached:'Outreached',pending:'Pending',minersTitle:'Data Source Management',refreshBtn:'\u21bb Refresh',apiKeysTitle:'API Key Management',apiKeysSub:'Changes take effect immediately and persist to DB (restored after restart)',applyLink:'Apply \u2197',notConfigured:'Not configured',mineTitle:'Trigger Mining Task',kwLabel:'Keyword (required)',locLabel:'Location',limitLabel:'Max Count (1\u2013500)',srcLabel:'Sources (blank=all)',enrichLabel:'Gemini Enrich',scoreLabel:'Min Score Filter',mineBtn:'\U0001F680 Start Mining',mineBtnRunning:'Mining\u2026',mineWait:'\u23f3 Mining in progress, please wait\u2026',enterKw:'Please enter a keyword',enterVal:'Please enter a key value',enabled:'Enabled',disabled:'Disabled',noApiKey:'No API Key required',opFail:'Operation failed',saveFail:'Save failed',loadFail:'Load failed',configured:'\u2705 Configured',notConfiguredBadge:'\u274c Not Configured',saveBtn:'Save',demoBanner:'\U0001F441 Demo Mode \u2014 Read Only \u00b7 Write operations are disabled',demoExit:'Exit Demo'},
+zh:{title:'\u26a1 Lead Mining \u63a7\u5236\u53f0',tab0:'\U0001F4C8 \u76d1\u63a7\u9762\u677f',tab1:'\u2699\ufe0f Miner \u914d\u7f6e',tab2:'\U0001F511 API Keys',tab3:'\U0001F680 \u7acb\u5373\u91c7\u96c6',logout:'\u9000\u51fa\u767b\u5f55',loading:'\u52a0\u8f7d\u4e2d\u2026',lastUpd:'\u6700\u540e\u66f4\u65b0: ',cardRaw:'\u91c7\u96c6\u7ebf\u7d22',cardRawSub:'\u5168\u90e8 Raw',cardEnr:'AI \u5bcc\u5316',cardEnrPre:'\u7387 ',cardAvg:'\u5e73\u5747\u8bc4\u5206',cardAvgSub:'\u6ee1\u5206 100',cardHigh:'\u9ad8\u610f\u5411 70+',cardHighSub:'\u4f18\u5148\u5916\u5c55',cardEmails:'\u5df2\u53d1\u90ae\u4ef6',cardEmail:'\u542b\u90ae\u7b71',cardEmailSub:'\u53ef\u76f4\u63a5\u5916\u5c55',chartFunnel:'\U0001F4C8 \u91c7\u96c6\u6f0f\u6597',chartTop:'\u2b50 Top Leads \u8bc4\u5206',funnelLabels:['Raw','\u5bcc\u5316','70+','\u5df2\u5916\u5c55'],tableTitle:'\U0001F4E5 Top 20 \u9ad8\u610f\u5411\u7ebf\u7d22',colCompany:'\u516c\u53f8',colIndustry:'\u884c\u4e1a',colAddress:'\u5730\u5740',colScore:'\u8bc4\u5206',colEmail2:'\u90ae\u7b71',colStatus:'\u72b6\u6001',noData:'\u6682\u65e0\u5bcc\u5316\u6570\u636e',outreached:'\u5df2\u5916\u5c55',pending:'\u5f85\u5916\u5c55',minersTitle:'\u6570\u636e\u6e90\u7ba1\u7406',refreshBtn:'\u21bb \u5237\u65b0',apiKeysTitle:'API Key \u7ba1\u7406',apiKeysSub:'\u4fdd\u5b58\u540e\u7acb\u5373\u751f\u6548\uff0c\u5e76\u6301\u4e45\u5316\u5230\u6570\u636e\u5e93\uff08\u91cd\u542f\u540e\u81ea\u52a8\u6062\u590d\uff09',applyLink:'\u7533\u8bf7 \u2197',notConfigured:'\u672a\u914d\u7f6e',mineTitle:'\u624b\u52a8\u89e6\u53d1\u91c7\u96c6\u4efb\u52a1',kwLabel:'\u5173\u952e\u8bcd (\u5fc5\u586b)',locLabel:'\u5730\u533a',limitLabel:'\u6700\u591a\u6761\u6570 (1\u2013500)',srcLabel:'\u6570\u636e\u6e90\uff08\u7559\u7a7a=\u5168\u90e8\u542f\u7528\uff09',enrichLabel:'\u7acb\u5373 Gemini \u5bcc\u5316',scoreLabel:'\u6700\u4f4e\u8bc4\u5206\u8fc7\u6ee4',mineBtn:'\U0001F680 \u5f00\u59cb\u91c7\u96c6',mineBtnRunning:'\u91c7\u96c6\u4e2d\u2026',mineWait:'\u23f3 \u6b63\u5728\u91c7\u96c6\uff0c\u8bf7\u7a0d\u5019\u2026',enterKw:'\u8bf7\u8f93\u5165\u5173\u952e\u8bcd',enterVal:'\u8bf7\u8f93\u5165 Key \u503c',enabled:'\u5df2\u542f\u7528',disabled:'\u5df2\u7981\u7528',noApiKey:'\u65e0\u9700 API Key',opFail:'\u64cd\u4f5c\u5931\u8d25',saveFail:'\u4fdd\u5b58\u5931\u8d25',loadFail:'\u52a0\u8f7d\u5931\u8d25',configured:'\u2705 \u5df2\u914d\u7f6e',notConfiguredBadge:'\u274c \u672a\u914d\u7f6e',saveBtn:'\u4fdd\u5b58',demoBanner:'\U0001F441 \u6f14\u793a\u6a21\u5f0f \u2014 \u53ea\u8bfb \u00b7 \u5199\u64cd\u4f5c\u5df2\u7981\u7528',demoExit:'\u9000\u51fa\u6f14\u793a'}
+};
+let _lang=localStorage.getItem('lang')||'en';
+function t(k){const d=I18N[_lang]||I18N.en;return d[k]!==undefined?d[k]:k;}
+
+function applyLang(l){
+  _lang=l;localStorage.setItem('lang',l);
+  document.getElementById('html-root').lang=l==='zh'?'zh':'en';
+  document.getElementById('hdr-title-text').textContent=t('title');
+  document.getElementById('tab0').textContent=t('tab0');
+  document.getElementById('tab1').textContent=t('tab1');
+  document.getElementById('tab2').textContent=t('tab2');
+  document.getElementById('tab3').textContent=t('tab3');
+  document.getElementById('hdr-logout').textContent=t('logout');
+  document.getElementById('hdr-en').classList.toggle('active',l==='en');
+  document.getElementById('hdr-zh').classList.toggle('active',l==='zh');
+  // Tab 0 labels
+  document.getElementById('chart-funnel-title').textContent=t('chartFunnel');
+  document.getElementById('chart-top-title').textContent=t('chartTop');
+  document.getElementById('table-title').textContent=t('tableTitle');
+  document.getElementById('th-company').textContent=t('colCompany');
+  document.getElementById('th-industry').textContent=t('colIndustry');
+  document.getElementById('th-address').textContent=t('colAddress');
+  document.getElementById('th-score').textContent=t('colScore');
+  document.getElementById('th-email').textContent=t('colEmail2');
+  document.getElementById('th-status').textContent=t('colStatus');
+  // Tab 1
+  document.getElementById('miners-title').textContent=t('minersTitle');
+  document.getElementById('miners-refresh').textContent=t('refreshBtn');
+  // Tab 2
+  document.getElementById('apikeys-title').textContent=t('apiKeysTitle');
+  document.getElementById('apikeys-sub').textContent=t('apiKeysSub');
+  // Tab 3
+  document.getElementById('mine-section-title').textContent=t('mineTitle');
+  document.getElementById('lbl-kw').textContent=t('kwLabel');
+  document.getElementById('lbl-loc').textContent=t('locLabel');
+  document.getElementById('lbl-limit').textContent=t('limitLabel');
+  document.getElementById('lbl-src').textContent=t('srcLabel');
+  document.getElementById('lbl-enrich').textContent=t('enrichLabel');
+  document.getElementById('lbl-score').textContent=t('scoreLabel');
+  document.getElementById('mine-btn').textContent=t('mineBtn');
+  // Demo banner
+  const banner=document.getElementById('demo-banner-text');
+  if(banner)banner.textContent=t('demoBanner');
+  const exitLink=document.getElementById('demo-exit-link');
+  if(exitLink)exitLink.textContent=t('demoExit');
+  // timestamp
+  const ts0=document.getElementById('ts0');
+  if(ts0&&ts0.textContent!==t('loading'))ts0.textContent=t('loading');
+  // Re-render current active tab data
+  const activeIdx=[...document.querySelectorAll('.tab')].findIndex(tab=>tab.classList.contains('active'));
+  if(activeIdx===0)loadDashboard();
+  else if(activeIdx===1)loadSettings();
+  else if(activeIdx===2)loadKeys();
+}
+
 let _fc=null,_sc=null;
 const tabs=document.querySelectorAll('.tab');
 const panels=document.querySelectorAll('.tab-panel');
@@ -1023,20 +1149,20 @@ async function loadDashboard(){
       fetch('/leads?min_score=0&limit=20').then(r=>r.json()).catch(()=>({leads:[]}))
     ]);
     const s=stats.leads||{},o=stats.outreach||{};
-    document.getElementById('ts0').textContent='最后更新: '+new Date().toLocaleTimeString('zh-CN');
+    document.getElementById('ts0').textContent=t('lastUpd')+new Date().toLocaleTimeString(_lang==='zh'?'zh-CN':'en-US');
     document.getElementById('htdot').style.background='#22c55e';
     document.getElementById('cards').innerHTML=[
-      {v:s.raw_total||0,l:'采集线索',s2:'全部 Raw'},
-      {v:s.enriched_total||0,l:'AI 富化',s2:'率 '+(s.enrichment_rate||'0%')},
-      {v:+(s.avg_score||0).toFixed(1),l:'平均评分',s2:'满分 100'},
-      {v:s.high_score_70||0,l:'高意向 70+',s2:'优先外展'},
-      {v:o.emails_sent||0,l:'已发邮件',s2:'转化 '+(o.conversion_rate||'0%')},
-      {v:s.raw_with_email||0,l:'含邮箱',s2:'可直接外展'},
+      {v:s.raw_total||0,l:t('cardRaw'),s2:t('cardRawSub')},
+      {v:s.enriched_total||0,l:t('cardEnr'),s2:t('cardEnrPre')+(s.enrichment_rate||'0%')},
+      {v:+(s.avg_score||0).toFixed(1),l:t('cardAvg'),s2:t('cardAvgSub')},
+      {v:s.high_score_70||0,l:t('cardHigh'),s2:t('cardHighSub')},
+      {v:o.emails_sent||0,l:t('cardEmails'),s2:''},
+      {v:s.raw_with_email||0,l:t('cardEmail'),s2:t('cardEmailSub')},
     ].map(c=>`<div class="card"><div class="val">${c.v}</div><div class="lbl">${c.l}</div><div class="sub2">${c.s2}</div></div>`).join('');
 
     const fc=document.getElementById('fc');
     if(_fc)_fc.destroy();
-    _fc=new Chart(fc,{type:'bar',data:{labels:['Raw','富化','70+','已外展'],
+    _fc=new Chart(fc,{type:'bar',data:{labels:t('funnelLabels'),
       datasets:[{data:[s.raw_total||0,s.enriched_total||0,s.high_score_70||0,o.emails_sent||0],
       backgroundColor:['#1d4ed8','#7c3aed','#059669','#d97706'],borderRadius:6,borderSkipped:false}]},
       options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},x:{ticks:{color:'#94a3b8'}}}}});
@@ -1053,10 +1179,10 @@ async function loadDashboard(){
       scales:{x:{max:100,grid:{color:'#0f172a'},ticks:{color:'#64748b'}},y:{ticks:{color:'#94a3b8',font:{size:10}}}}}});
 
     const tb=document.getElementById('ltb');
-    if(!top.length){tb.innerHTML='<tr><td colspan=7 style="text-align:center;color:#475569;padding:24px">暂无富化数据</td></tr>';return;}
+    if(!top.length){tb.innerHTML=`<tr><td colspan=7 style="text-align:center;color:#475569;padding:24px">${t('noData')}</td></tr>`;return;}
     tb.innerHTML=top.map((l,i)=>{
       const cls=l.score>=70?'badge-green':l.score>=50?'badge-blue':'badge-red';
-      return`<tr><td>${i+1}</td><td>${l.business_name||''}</td><td style="color:#64748b">${l.industry_category||l.industry_keyword||''}</td><td style="color:#475569;font-size:.75rem">${(l.address||'').substring(0,30)}</td><td><span class="badge ${cls}">${l.score}</span></td><td style="color:#64748b;font-size:.75rem">${l.email||'—'}</td><td><span class="badge ${l.outreached?'badge-green':'badge-blue'}">${l.outreached?'已外展':'待外展'}</span></td></tr>`;
+      return`<tr><td>${i+1}</td><td>${l.business_name||''}</td><td style="color:#64748b">${l.industry_category||l.industry_keyword||''}</td><td style="color:#475569;font-size:.75rem">${(l.address||'').substring(0,30)}</td><td><span class="badge ${cls}">${l.score}</span></td><td style="color:#64748b;font-size:.75rem">${l.email||'—'}</td><td><span class="badge ${l.outreached?'badge-green':'badge-blue'}">${l.outreached?t('outreached'):t('pending')}</span></td></tr>`;
     }).join('');
   }catch(e){console.error(e);document.getElementById('htdot').style.background='#ef4444';}
 }
@@ -1064,14 +1190,14 @@ async function loadDashboard(){
 // ── TAB 1: Miner 配置 ────────────────────────────────────────────────────
 async function loadSettings(){
   const res=await fetch('/admin/settings').then(r=>r.json()).catch(()=>null);
-  if(!res){document.getElementById('miner-grid').innerHTML='<p style="color:#fca5a5">加载失败</p>';return;}
+  if(!res){document.getElementById('miner-grid').innerHTML=`<p style="color:#fca5a5">${t('loadFail')}</p>`;return;}
   const order=['serper','hunter','google_cse','sec_ph','reddit','yellow_pages','philgeps','facebook','dti_bnrs'];
   const phaseColors={1:'badge-blue',2:'badge-yellow',3:'badge-gray'};
   document.getElementById('miner-grid').innerHTML=order.filter(n=>res.miners[n]).map(name=>{
     const m=res.miners[name];
     const d=m.display;
-    const keyInfo=m.env_key?`<div class="key-status"><span class="dot ${m.has_key?'dot-green':'dot-red'}"></span><span>${m.env_key}: ${m.has_key?'✅ 已配置':'❌ 未配置'}</span></div>`:'<div class="key-status"><span class="dot dot-green"></span><span>无需 API Key</span></div>';
-    const keyInput=(!m.has_key&&m.env_key)?`<div class="key-row"><input type="password" id="ki-${name}" placeholder="${m.env_key}…"><button class="btn btn-primary btn-sm" onclick="saveKey('${m.env_key}','ki-${name}')">保存</button></div>`:'';
+    const keyInfo=m.env_key?`<div class="key-status"><span class="dot ${m.has_key?'dot-green':'dot-red'}"></span><span>${m.env_key}: ${m.has_key?t('configured'):t('notConfiguredBadge')}</span></div>`:`<div class="key-status"><span class="dot dot-green"></span><span>${t('noApiKey')}</span></div>`;
+    const keyInput=(!m.has_key&&m.env_key)?`<div class="key-row"><input type="password" id="ki-${name}" placeholder="${m.env_key}…"><button class="btn btn-primary btn-sm" onclick="saveKey('${m.env_key}','ki-${name}')">${t('saveBtn')}</button></div>`:'';
     return`<div class="miner-card ${m.enabled?'enabled':''}" id="mc-${name}">
       <div class="mc-header">
         <div>
@@ -1084,7 +1210,7 @@ async function loadSettings(){
       <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
         <div class="toggle-wrap">
           <label class="toggle"><input type="checkbox" ${m.enabled?'checked':''} onchange="toggleMiner('${name}',this.checked)"><span class="slider"></span></label>
-          <span id="mtxt-${name}">${m.enabled?'已启用':'已禁用'}</span>
+          <span id="mtxt-${name}">${m.enabled?t('enabled'):t('disabled')}</span>
         </div>
       </div>
     </div>`;
@@ -1098,52 +1224,52 @@ async function toggleMiner(name,enabled){
   const r=await fetch('/admin/settings/miner-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,enabled})}).then(r=>r.json()).catch(()=>null);
   if(r?.ok){
     document.getElementById(`mc-${name}`).classList.toggle('enabled',enabled);
-    document.getElementById(`mtxt-${name}`).textContent=enabled?'已启用':'已禁用';
-    toast(`${name} ${enabled?'已启用 ✅':'已禁用'}`);
-  }else{toast('操作失败',false);}
+    document.getElementById(`mtxt-${name}`).textContent=enabled?t('enabled'):t('disabled');
+    toast(`${name} ${enabled?t('enabled')+' ✅':t('disabled')}`);
+  }else{toast(t('opFail'),false);}
 }
 
 // ── TAB 2: API Keys ──────────────────────────────────────────────────────
 async function loadKeys(){
   const res=_lastSettings||await fetch('/admin/settings').then(r=>r.json()).catch(()=>null);
-  if(!res){document.getElementById('key-list').innerHTML='<p style="color:#fca5a5">加载失败</p>';return;}
+  if(!res){document.getElementById('key-list').innerHTML=`<p style="color:#fca5a5">${t('loadFail')}</p>`;return;}
   document.getElementById('key-list').innerHTML=`
   <div style="background:#1e293b;border-radius:10px;padding:16px">
     ${Object.entries(res.api_keys).map(([k,info])=>`
     <div class="key-table-row">
       <div>
         <div style="font-weight:600;font-size:.85rem">${info.label}</div>
-        <div style="font-size:.72rem;color:#475569;margin-top:2px">${info.hint} · <a href="${info.url}" target="_blank" style="color:#38bdf8;text-decoration:none">申请 ↗</a></div>
+        <div style="font-size:.72rem;color:#475569;margin-top:2px">${info.hint} · <a href="${info.url}" target="_blank" style="color:#38bdf8;text-decoration:none">${t('applyLink')}</a></div>
       </div>
       <div>
-        <div style="font-family:monospace;font-size:.78rem;color:${info.has_key?'#34d399':'#f87171'};margin-bottom:4px">${info.has_key?info.masked:'未配置'}</div>
+        <div style="font-family:monospace;font-size:.78rem;color:${info.has_key?'#34d399':'#f87171'};margin-bottom:4px">${info.has_key?info.masked:t('notConfigured')}</div>
         <div class="key-row" style="margin-top:0">
-          <input type="password" id="kf-${k}" placeholder="粘贴新的 ${k}…" style="font-size:.78rem">
-          <button class="btn btn-primary btn-sm" onclick="saveKey('${k}','kf-${k}')">保存</button>
+          <input type="password" id="kf-${k}" placeholder="${k}…" style="font-size:.78rem">
+          <button class="btn btn-primary btn-sm" onclick="saveKey('${k}','kf-${k}')">${t('saveBtn')}</button>
         </div>
       </div>
-      <div><span class="badge ${info.has_key?'badge-green':'badge-red'}">${info.has_key?'✅ 已配置':'❌ 未配置'}</span></div>
+      <div><span class="badge ${info.has_key?'badge-green':'badge-red'}">${info.has_key?t('configured'):t('notConfiguredBadge')}</span></div>
     </div>`).join('')}
   </div>`;
 }
 
 async function saveKey(envKey,inputId){
   const val=document.getElementById(inputId)?.value?.trim();
-  if(!val){toast('请输入 Key 值',false);return;}
+  if(!val){toast(t('enterVal'),false);return;}
   const r=await fetch('/admin/settings/apikey',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:envKey,value:val})}).then(r=>r.json()).catch(()=>null);
   if(r?.ok){
-    toast(`${envKey} 保存成功 ✅`);
+    toast(`${envKey} ${t('configured')} ✅`);
     document.getElementById(inputId).value='';
     _lastSettings=null;
     await loadSettings();
     await loadKeys();
-  }else{toast('保存失败',false);}
+  }else{toast(t('saveFail'),false);}
 }
 
 // ── TAB 3: 立即采集 ──────────────────────────────────────────────────────
 async function startMine(){
   const kw=document.getElementById('m-kw').value.trim();
-  if(!kw){toast('请输入关键词',false);return;}
+  if(!kw){toast(t('enterKw'),false);return;}
   const loc=document.getElementById('m-loc').value.trim()||'Philippines';
   const limit=parseInt(document.getElementById('m-limit').value)||50;
   const srcRaw=document.getElementById('m-src').value.trim();
@@ -1154,38 +1280,50 @@ async function startMine(){
   if(sources)body.sources=sources;
 
   const btn=document.getElementById('mine-btn');
-  btn.disabled=true;btn.textContent='采集中…';
+  btn.disabled=true;btn.textContent=t('mineBtnRunning');
   const box=document.getElementById('mine-result');
-  box.style.display='block';box.textContent='⏳ 正在采集，请稍候…';
+  box.style.display='block';box.textContent=t('mineWait');
 
   try{
     const t0=Date.now();
     const resp=await fetch('/mine',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await resp.json();
     const elapsed=((Date.now()-t0)/1000).toFixed(1);
-    if(!resp.ok){box.textContent='❌ 错误: '+JSON.stringify(data,null,2);return;}
-    const summary=`✅ 采集完成！耗时 ${elapsed}s
+    if(!resp.ok){box.textContent='❌ Error: '+JSON.stringify(data,null,2);return;}
+    const summary=`✅ Mining complete! ${elapsed}s
 ─────────────────────────────────────
-任务 ID  : ${data.task_id}
-采集总数 : ${data.total} 条
-去重删除 : ${data.dedup_removed} 条
-净新增   : ${data.total - data.dedup_removed} 条
-耗时     : ${data.duration_sec}s
+Task ID  : ${data.task_id}
+Total    : ${data.total}
+Deduped  : ${data.dedup_removed}
+Net New  : ${data.total - data.dedup_removed}
+Duration : ${data.duration_sec}s
 ─────────────────────────────────────
-各数据源：
-${Object.entries(data.source_counts||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n')||'  （无）'}
+Sources:
+${Object.entries(data.source_counts||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n')||'  (none)'}
 ${Object.keys(data.errors||{}).length?'\\n错误:\\n'+Object.entries(data.errors||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n'):''}
 ─────────────────────────────────────
-前5条线索预览：
-${(data.leads||[]).slice(0,5).map(l=>`  [${l.score||0}] ${l.business_name||''} | ${l.email||'无邮箱'}`).join('\\n')||'（无）'}`;
+Top 5 Leads:
+${(data.leads||[]).slice(0,5).map(l=>`  [${l.score||0}] ${l.business_name||''} | ${l.email||'no email'}`).join('\\n')||'(none)'}`;
     box.textContent=summary;
-    toast(`采集完成：${data.total} 条 ✅`);
-  }catch(e){box.textContent='❌ 请求失败: '+e.message;toast('采集失败',false);}
-  finally{btn.disabled=false;btn.textContent='🚀 开始采集';}
+    toast(`Mining done: ${data.total} leads ✅`);
+  }catch(e){box.textContent='❌ Error: '+e.message;toast(t('saveFail'),false);}
+  finally{btn.disabled=false;btn.textContent=t('mineBtn');}
 }
 
 // 初始化
-loadDashboard();
+if(window.DEMO){
+  document.getElementById('demo-banner').classList.add('show');
+  // 禁用所有写操作按钮和输入框
+  setTimeout(()=>{
+    document.querySelectorAll('input[type=password],input[type=text],input[type=number]').forEach(el=>el.disabled=true);
+    document.querySelectorAll('input[type=checkbox]').forEach(el=>el.disabled=true);
+    document.querySelectorAll('#mine-btn,#miners-refresh').forEach(el=>el.disabled=true);
+    document.querySelectorAll('.miner-card .toggle input').forEach(el=>el.disabled=true);
+    // disable all save buttons
+    document.querySelectorAll('.btn-primary').forEach(el=>{if(el.id!=='mine-btn')el.disabled=true;else el.disabled=true;});
+  },500);
+}
+applyLang(_lang);
 setInterval(loadDashboard,60000);
 </script>
 </body>
