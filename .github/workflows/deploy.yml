@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      domain:
+        description: '自定义域名（留空则自动生成 nip.io 域名）'
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -96,8 +101,28 @@ jobs:
             sleep 10
             docker compose -f docker-compose.prod.yml up -d sales-outreach n8n
 
+            # 启动 nginx（HTTP 模式，等待 SSL 脚本处理）
+            docker compose -f docker-compose.prod.yml up -d nginx certbot
+
             # 清理旧镜像
             docker image prune -f
+
+      - name: Setup domain & SSL
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key:      ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd /opt/lead-mining-system
+
+            # 若 workflow_dispatch 传入了自定义域名则使用，否则自动生成 nip.io
+            CUSTOM_DOMAIN="${{ github.event.inputs.domain }}"
+            if [ -n "$CUSTOM_DOMAIN" ]; then
+              bash scripts/setup-ssl.sh "$CUSTOM_DOMAIN"
+            else
+              bash scripts/setup-ssl.sh
+            fi
 
       - name: Import n8n workflows
         uses: appleboy/ssh-action@v1.0.3

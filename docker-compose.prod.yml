@@ -89,7 +89,9 @@ services:
       DB_POSTGRESDB_SCHEMA:           n8n
       LEAD_MINER_URL:                 http://lead-miner:8000
       GEMINI_API_KEY:                 ${GEMINI_API_KEY}
-      # Cookie 安全（HTTP 访问时必须设为 false；如果配了 HTTPS 可删除此行）
+      # 通过 nginx HTTPS 代理时，设置协议为 https 以修复 cookie
+      N8N_PROTOCOL:                   ${N8N_PROTOCOL:-http}
+      # Cookie 安全（HTTP 访问时必须设 false；如果配了 HTTPS 可删除此行）
       N8N_SECURE_COOKIE:              "false"
       N8N_LOG_LEVEL:                  info
     depends_on:
@@ -101,10 +103,37 @@ services:
     ports:
       - "5678:5678"
 
+  # ── Nginx 反代理 + SSL 入口 ──────────────────────────────────
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - n8n
+      - lead-miner
+      - sales-outreach
+
+  # ── Certbot 自动 SSL 证书 ──────────────────────────────────────
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done"]
+
 volumes:
   postgres_data:
   chroma_data:
   n8n_data:
+  certbot_www:
+  certbot_certs:
 
 networks:
   default:
