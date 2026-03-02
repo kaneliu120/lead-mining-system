@@ -46,8 +46,15 @@ class ChromaWriter:
             ef = embedding_functions.SentenceTransformerEmbeddingFunction(
                 model_name=self.embedding_model
             )
-        except Exception:
-            ef = None           # fallback to chromadb default
+            logger.info("ChromaWriter using SentenceTransformer: %s", self.embedding_model)
+        except Exception as exc:
+            logger.warning(
+                "SentenceTransformerEmbeddingFunction unavailable (%s), "
+                "falling back to ChromaDB default embedding. "
+                "Vectors may be inconsistent if collection was created with a different EF.",
+                exc,
+            )
+            ef = None
 
         self._client = chromadb.HttpClient(host=self.host, port=self.port)
         self._collection = self._client.get_or_create_collection(
@@ -108,6 +115,13 @@ class ChromaWriter:
         if self._collection is None:
             raise RuntimeError("ChromaWriter not connected")
 
+        # ChromaDB raises ValueError when n_results > collection size
+        count = self._collection.count()
+        if count == 0:
+            logger.debug("ChromaWriter: collection is empty, returning no results")
+            return []
+        n_results = min(n_results, count)
+
         kwargs: Dict[str, Any] = {
             "query_texts": [query_text],
             "n_results": n_results,
@@ -115,7 +129,11 @@ class ChromaWriter:
         if where:
             kwargs["where"] = where
 
-        results = self._collection.query(**kwargs)
+        try:
+            results = self._collection.query(**kwargs)
+        except Exception as exc:
+            logger.error("ChromaWriter query failed: %s", exc)
+            return []
 
         output = []
         for i, doc_id in enumerate(results["ids"][0]):

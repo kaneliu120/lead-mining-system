@@ -4,7 +4,6 @@ SerperMiner — Phase 1 主力商户数据插件
 """
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import AsyncIterator, Optional
 
@@ -110,19 +109,14 @@ class SerperMiner(APIBasedMiner):
         return bool(self._cfg.api_key and len(self._cfg.api_key) > 10)
 
     async def health_check(self) -> MinerHealth:
-        try:
-            start = time.monotonic()
-            await self._request_with_retry(
-                "POST",
-                "/maps",
-                headers={"X-API-KEY": self.api_key, "Content-Type": "application/json"},
-                json={"q": "test restaurant", "gl": "ph", "num": 1},
-                retries=1,
-            )
-            latency = (time.monotonic() - start) * 1000
-            return MinerHealth(healthy=True, message="OK", latency_ms=latency)
-        except Exception as exc:
-            return MinerHealth(healthy=False, message=str(exc))
+        """
+        Config-only check — avoids consuming API quota on every Docker
+        health probe (which fires every 10 s).
+        Use /mine to do a real connectivity test.
+        """
+        if not await self.validate_config():
+            return MinerHealth(healthy=False, message="SERPER_API_KEY not configured")
+        return MinerHealth(healthy=True, message="configured (key present)")
 
     @staticmethod
     def _build_maps_url(place: dict) -> str:

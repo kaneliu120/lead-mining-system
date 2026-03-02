@@ -245,12 +245,17 @@ async def rag_query(req: RagQueryRequest):
     基于 ChromaDB 向量搜索，返回最相关的线索文档。
     ChromaDB HTTP Client 为同步 I/O，用 asyncio.to_thread 避免阻塞事件循环。
     """
-    results = await asyncio.to_thread(
-        state.chroma.query_similar,
-        req.query,
-        req.n,
-        req.where,
-    )
+    try:
+        results = await asyncio.to_thread(
+            state.chroma.query_similar,
+            req.query,
+            req.n,
+            req.where,
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("RAG query error: %s", exc)
+        return {"results": [], "error": str(exc)}
     return {"results": results}
 
 

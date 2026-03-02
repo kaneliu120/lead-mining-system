@@ -87,15 +87,41 @@ class APIBasedMiner(BaseMiner):
                 response = await self.client.request(method, url, **kwargs)
                 response.raise_for_status()
                 return response
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                status = exc.response.status_code
+                # 4xx 客户端错误（429 除外）是永久性错误，不重试，立即上报
+                if 400 <= status < 500 and status != 429:
+                    hint = ""
+                    if status == 403:
+                        hint = (
+                            " [Hint: Serper Maps 403 可能是 Maps API 未开通。"
+                            "请登录 https://serper.dev 检查订阅计划及 API Key 权限]"
+                        )
+                    self.logger.error(
+                        f"{self.__class__.__name__} HTTP {status} (不可重试): {exc}{hint}"
+                    )
+                    raise
+                if attempt < max_retries:
+                    wait = 2 ** attempt          # 1s → 2s → 4s
+                    self.logger.warning(
+                        f"{self.__class__.__name__} request failed "
+                        f"(attempt {attempt + 1}/{max_retries + 1}), "
+                        f"retry in {wait}s: {exc}"
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    self.logger.error(
+                        f"{self.__class__.__name__} all retries exhausted: {exc}"
+                    )
             except (
-                httpx.HTTPStatusError,
                 httpx.ConnectError,
-                httpx.TimeoutException,      # 覆盖所有超时类型：ReadTimeout / ConnectTimeout / WriteTimeout / PoolTimeout
+                httpx.TimeoutException,      # ReadTimeout / ConnectTimeout / WriteTimeout / PoolTimeout
                 httpx.RemoteProtocolError,
             ) as exc:
                 last_error = exc
                 if attempt < max_retries:
-                    wait = 2 ** attempt          # 1 → 2 → 4 秒
+                    wait = 2 ** attempt          # 1s → 2s → 4s
                     self.logger.warning(
                         f"{self.__class__.__name__} request failed "
                         f"(attempt {attempt + 1}/{max_retries + 1}), "
