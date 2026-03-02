@@ -67,9 +67,15 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key:      ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 进入项目目录（首次部署时 git clone）
-            if [ ! -d "/opt/lead-mining-system" ]; then
-              git clone https://github.com/kaneliu120/lead-mining-system.git /opt/lead-mining-system
+            # 进入项目目录（首次部署时 git clone，已存在但非 git 仓库则修复）
+            if [ ! -d "/opt/lead-mining-system/.git" ]; then
+              if [ -d "/opt/lead-mining-system" ]; then
+                cp /opt/lead-mining-system/.env /tmp/lead-mining-backup.env 2>/dev/null || true
+                sudo rm -rf /opt/lead-mining-system
+              fi
+              sudo git clone https://github.com/kaneliu120/lead-mining-system.git /opt/lead-mining-system
+              sudo chown -R $USER:$USER /opt/lead-mining-system
+              [ -f /tmp/lead-mining-backup.env ] && cp /tmp/lead-mining-backup.env /opt/lead-mining-system/.env
             fi
 
             cd /opt/lead-mining-system
