@@ -341,7 +341,8 @@ class PipedriveAdapter(BaseCRMAdapter):
         base = company_domain if "pipedrive.com" in company_domain else f"{company_domain}.pipedrive.com"
         self._base = f"https://{base}/api/v1"
         self._token = api_token
-        self._params = {"api_token": api_token}    # 所有请求附加此参数
+        # 使用 Authorization header 代替 URL 参数，防止令牌泄露到日志/Referer
+        self._headers = {"Authorization": f"Bearer {api_token}"}
 
     async def push_lead(self, lead: CRMLead) -> CRMSyncResult:
         """创建/更新 Organization（公司）+ Person（联系人）+ Lead（线索）。"""
@@ -375,7 +376,8 @@ class PipedriveAdapter(BaseCRMAdapter):
         # 搜索
         resp = await client.get(
             f"{self._base}/organizations/search",
-            params={**self._params, "term": lead.business_name, "exact_match": True, "limit": 1},
+            headers=self._headers,
+            params={"term": lead.business_name, "exact_match": True, "limit": 1},
         )
         if resp.status_code == 200:
             items = resp.json().get("data", {}).get("items", [])
@@ -385,7 +387,7 @@ class PipedriveAdapter(BaseCRMAdapter):
         # 创建
         resp = await client.post(
             f"{self._base}/organizations",
-            params=self._params,
+            headers=self._headers,
             json={
                 "name":    lead.business_name,
                 "address": lead.address,
@@ -406,7 +408,8 @@ class PipedriveAdapter(BaseCRMAdapter):
         if lead.email:
             resp = await client.get(
                 f"{self._base}/persons/search",
-                params={**self._params, "term": lead.email, "exact_match": True, "limit": 1},
+                headers=self._headers,
+                params={"term": lead.email, "exact_match": True, "limit": 1},
             )
             if resp.status_code == 200:
                 items = resp.json().get("data", {}).get("items", [])
@@ -426,7 +429,7 @@ class PipedriveAdapter(BaseCRMAdapter):
 
         resp = await client.post(
             f"{self._base}/persons",
-            params=self._params,
+            headers=self._headers,
             json=payload,
         )
         if resp.status_code in (200, 201):
@@ -452,7 +455,7 @@ class PipedriveAdapter(BaseCRMAdapter):
 
         resp = await client.post(
             f"{self._base}/leads",
-            params=self._params,
+            headers=self._headers,
             json=payload,
         )
         if resp.status_code in (200, 201):
@@ -481,7 +484,7 @@ class PipedriveAdapter(BaseCRMAdapter):
 
             resp = await client.post(
                 f"{self._base}/activities",
-                params=self._params,
+                headers=self._headers,
                 json=payload,
             )
             if resp.status_code in (200, 201):
@@ -499,7 +502,7 @@ class PipedriveAdapter(BaseCRMAdapter):
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get(
                     f"{self._base}/users/me",
-                    params=self._params,
+                    headers=self._headers,
                 )
                 return resp.status_code == 200
         except Exception:

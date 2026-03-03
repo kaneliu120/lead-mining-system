@@ -33,6 +33,23 @@ SENDER_NAME     = os.environ.get("SENDER_NAME",      "Sales Team")
 HUNTER_API_KEY  = os.environ.get("HUNTER_API_KEY",   "")
 
 
+def validate_env_vars() -> list[str]:
+    """启动时校验关键环境变量，返回缺失项的警告列表"""
+    warnings = []
+    if not GEMINI_API_KEY:
+        warnings.append("GEMINI_API_KEY is not set — email generation will be disabled")
+    if not SMTP_USER or not SMTP_PASSWORD:
+        warnings.append("SMTP_USER/SMTP_PASSWORD not set — email sending will be disabled")
+    if not HUNTER_API_KEY:
+        warnings.append("HUNTER_API_KEY is not set — contact lookup will be disabled")
+    for w in warnings:
+        logger.warning(f"[ENV CHECK] {w}")
+    return warnings
+
+
+# ── 启动校验 ────────────────────────────────────────────────────────────────────
+_startup_warnings = validate_env_vars()
+
 # ── Gemini 模型懒加载单例（避免每次调用重新初始化 + 全局竞态）─────────────────
 _gemini_model = None
 

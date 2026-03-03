@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Body, Request, Response, Cookie
 from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from app.middleware import RateLimitMiddleware
+from app.middleware import RateLimitMiddleware, CSRFMiddleware
 
 from app.config import (
     build_orchestrator,
@@ -85,6 +85,8 @@ app = FastAPI(
 
 # P2-6：速率限制中间件（令牌桶，防止单 IP 滥用）
 app.add_middleware(RateLimitMiddleware, enabled=True)
+# CSRF 防护中间件（Origin/Referer 验证，防止跨站请求伪造）
+app.add_middleware(CSRFMiddleware, enabled=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 管理员认证 — 基于 HMAC 签名 Cookie

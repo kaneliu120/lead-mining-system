@@ -26,18 +26,23 @@ class ChromaWriter:
         port: int = 8001,
         collection_name: str = DEFAULT_COLLECTION,
         embedding_model: str = "all-MiniLM-L6-v2",
+        auth_token: str = "",
+        use_ssl: bool = False,
     ):
         self.host = host
         self.port = port
         self.collection_name = collection_name
         self.embedding_model = embedding_model
+        self.auth_token = auth_token
+        self.use_ssl = use_ssl
         self._client = None
         self._collection = None
 
     def connect(self) -> None:
-        """初始化 ChromaDB 客户端（同步）"""
+        """初始化 ChromaDB 客户端（同步），支持认证和 SSL"""
         try:
             import chromadb
+            from chromadb.config import Settings
         except ImportError:
             raise ImportError("chromadb not installed. Run: pip install chromadb")
 
@@ -56,7 +61,30 @@ class ChromaWriter:
             )
             ef = None
 
-        self._client = chromadb.HttpClient(host=self.host, port=self.port)
+        # 构建连接参数
+        client_kwargs = {
+            "host": self.host,
+            "port": self.port,
+        }
+
+        # 配置认证
+        settings_kwargs = {}
+        if self.auth_token:
+            settings_kwargs["chroma_client_auth_provider"] = (
+                "chromadb.auth.token_authn.TokenAuthClientProvider"
+            )
+            settings_kwargs["chroma_client_auth_credentials"] = self.auth_token
+            logger.info("ChromaWriter: token authentication enabled")
+
+        # 配置 SSL
+        if self.use_ssl:
+            client_kwargs["ssl"] = True
+            logger.info("ChromaWriter: SSL/TLS enabled")
+
+        if settings_kwargs:
+            client_kwargs["settings"] = Settings(**settings_kwargs)
+
+        self._client = chromadb.HttpClient(**client_kwargs)
         self._collection = self._client.get_or_create_collection(
             name=self.collection_name,
             embedding_function=ef,

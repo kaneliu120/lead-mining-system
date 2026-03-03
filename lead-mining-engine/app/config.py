@@ -198,6 +198,8 @@ def build_chroma_writer() -> ChromaWriter:
         host=_env("CHROMA_HOST", "localhost"),
         port=int(_env("CHROMA_PORT", "8001")),
         collection_name=_env("CHROMA_COLLECTION", "all_leads"),
+        auth_token=_env("CHROMA_AUTH_TOKEN", ""),
+        use_ssl=_env_bool("CHROMA_USE_SSL", default=False),
     )
 
 

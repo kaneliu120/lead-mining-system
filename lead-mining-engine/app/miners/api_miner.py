@@ -6,11 +6,41 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 import httpx
 
 from app.miners.base import BaseMiner, MinerConfig
+
+
+class _AsyncTokenBucket:
+    """异步令牌桶速率限制器，确保 API 请求不超过配置的速率"""
+
+    __slots__ = ("_rate", "_capacity", "_tokens", "_last_ts", "_lock")
+
+    def __init__(self, rate_per_minute: int):
+        self._rate = rate_per_minute / 60.0  # tokens/second
+        self._capacity = max(rate_per_minute, 1)
+        self._tokens = float(self._capacity)
+        self._last_ts = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        """等待直到获取一个令牌"""
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                self._tokens = min(
+                    self._capacity,
+                    self._tokens + (now - self._last_ts) * self._rate,
+                )
+                self._last_ts = now
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    return
+            # 令牌不足，等待一小段时间后重试
+            await asyncio.sleep(1.0 / max(self._rate, 0.1))
 
 
 class APIBasedMiner(BaseMiner):
@@ -19,6 +49,7 @@ class APIBasedMiner(BaseMiner):
 
     子类通过 self.client 调用 API，
     通过 self._request_with_retry() 获得自动重试。
+    运行时自动执行 config.rate_limit_per_minute 定义的速率限制。
     """
 
     def __init__(
@@ -31,6 +62,7 @@ class APIBasedMiner(BaseMiner):
         self.api_key = api_key
         self.base_url = base_url
         self._client: Optional[httpx.AsyncClient] = None
+        self._rate_limiter = _AsyncTokenBucket(config.rate_limit_per_minute)
 
     # ── 生命周期 ──────────────────────────────────────────────────────────────
 
@@ -84,6 +116,8 @@ class APIBasedMiner(BaseMiner):
 
         for attempt in range(max_retries + 1):
             try:
+                # 在发送请求前执行速率限制等待
+                await self._rate_limiter.acquire()
                 response = await self.client.request(method, url, **kwargs)
                 response.raise_for_status()
                 return response

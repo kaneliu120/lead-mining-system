@@ -12,6 +12,11 @@ services:
       POSTGRES_DB:       ${POSTGRES_DB:-leads}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -23,6 +28,14 @@ services:
     restart: unless-stopped
     volumes:
       - chroma_data:/chroma/.chroma/index
+    environment:
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_AUTH_TOKEN:-}
+      CHROMA_SERVER_AUTHN_PROVIDER:    ${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
       interval: 10s
@@ -46,6 +59,11 @@ services:
       - "8010:8000"
     volumes:
       - ./lead-mining-engine/config:/app/config:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
@@ -67,6 +85,11 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
 
   n8n:
     image: n8nio/n8n:2.9.4

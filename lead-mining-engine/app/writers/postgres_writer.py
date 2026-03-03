@@ -253,6 +253,15 @@ class PostgresWriter:
         if self._pool is None:
             return []
 
+        # 输入校验（纵深防御）
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+        min_score = max(0, min(min_score, 100))
+        if industry_keyword and len(industry_keyword) > 200:
+            industry_keyword = industry_keyword[:200]
+        if source and len(source) > 50:
+            source = source[:50]
+
         conditions = ["1=1"]
         params: list = []
         idx = 1

@@ -26,10 +26,10 @@ services:
     volumes:
       - chroma_data:/chroma/.chroma/index
     environment:
-      CHROMA_SERVER_AUTHN_CREDENTIALS: ""
-      CHROMA_SERVER_AUTHN_PROVIDER:    ""
+      CHROMA_SERVER_AUTHN_CREDENTIALS: ${CHROMA_AUTH_TOKEN:-}
+      CHROMA_SERVER_AUTHN_PROVIDER:    ${CHROMA_AUTH_TOKEN:+chromadb.auth.token_authn.TokenAuthenticationServerProvider}
     ports:
-      - "8002:8000"   # 8001 被其他项目占用，改用 8002
+      - "${CHROMA_PORT:-8002}:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
       interval: 10s

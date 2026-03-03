@@ -9,12 +9,38 @@ P2-6：防止单个 IP 超速，保护上游 API 配额
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, FrozenSet, Optional, Tuple
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+
+def _parse_trusted_proxies() -> FrozenSet[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """从环境变量 TRUSTED_PROXY_IPS 解析可信代理 IP/CIDR 列表"""
+    raw = os.environ.get("TRUSTED_PROXY_IPS", "127.0.0.1,172.16.0.0/12")
+    networks = set()
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            networks.add(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            pass
+    return frozenset(networks)
+
+
+def _is_trusted_proxy(client_ip: str, trusted: FrozenSet) -> bool:
+    """判断 client_ip 是否在可信代理网段内"""
+    try:
+        addr = ipaddress.ip_address(client_ip)
+        return any(addr in net for net in trusted)
+    except ValueError:
+        return False
 
 
 # ── 令牌桶 ────────────────────────────────────────────────────────────────────
@@ -75,6 +101,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, enabled: bool = True):
         super().__init__(app)
         self._enabled  = enabled
+        self._trusted_proxies = _parse_trusted_proxies()
         # (client_ip, path_key) → TokenBucket
         self._buckets:   Dict[Tuple[str, str], _TokenBucket] = {}
         # 每 10 分钟清理一次不活跃的桶（避免内存泄漏）
@@ -89,11 +116,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path in self._EXEMPT or path.startswith("/docs") or path.startswith("/redoc"):
             return await call_next(request)
 
-        ip = (
-            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-            or (request.client.host if request.client else "")
-            or "anonymous"
-        )
+        ip = self._get_client_ip(request)
         rate, cap, path_key = self._match_rule(path)
         key  = (ip, path_key)
 
@@ -124,6 +147,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
     # ── 辅助 ──────────────────────────────────────────────────────────────────
+
+    def _get_client_ip(self, request: Request) -> str:
+        """
+        安全获取客户端 IP：仅当直连 IP 属于可信代理时才信任 X-Forwarded-For，
+        否则使用 TCP 连接的真实 IP，防止 IP 欺骗绕过速率限制。
+        """
+        direct_ip = request.client.host if request.client else ""
+        if direct_ip and _is_trusted_proxy(direct_ip, self._trusted_proxies):
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            if forwarded:
+                return forwarded.split(",")[0].strip()
+        return direct_ip or "anonymous"
 
     def _match_rule(self, path: str) -> Tuple[float, int, str]:
         """返回 (rate, capacity, path_key)"""
