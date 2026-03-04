@@ -1,6 +1,6 @@
 """
-LeadRaw / LeadEnriched 模型单元测试
-验证字段校验、dedup_key、序列化等
+LeadRaw / LeadEnriched Model Unit Tests
+Validates field validation, dedup_key, serialization, etc.
 """
 from __future__ import annotations
 
@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from app.models.lead import LeadRaw, LeadSource
 
 
-# ── LeadRaw 基础构造 ──────────────────────────────────────────────────────────
+# ── LeadRaw Basic Construction ────────────────────────────────────────────────────────
 
 def test_leadraw_minimal_fields():
-    """只需 source + business_name + industry_keyword 即可创建"""
+    """Only source + business_name + industry_keyword required to create"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="Test Biz",
@@ -26,7 +26,7 @@ def test_leadraw_minimal_fields():
 
 
 def test_leadraw_defaults():
-    """可选字段应有合理默认值"""
+    """Optional fields should have reasonable defaults"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="Biz",
@@ -41,7 +41,7 @@ def test_leadraw_defaults():
 
 
 def test_leadraw_with_all_fields():
-    """完整字段赋值应正确保存"""
+    """Full field assignment should save correctly"""
     lead = LeadRaw(
         source=LeadSource.HUNTER,
         business_name="Full Corp",
@@ -62,10 +62,10 @@ def test_leadraw_with_all_fields():
     assert lead.metadata["cid"] == "12345"
 
 
-# ── dedup_key 逻辑 ────────────────────────────────────────────────────────────
+# ── dedup_key Logic ────────────────────────────────────────────────────────────────────
 
 def test_dedup_key_phone_priority():
-    """有电话时，dedup_key 应以 phone: 为前缀"""
+    """When phone is present, dedup_key should be prefixed with phone:"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="Biz",
@@ -79,7 +79,7 @@ def test_dedup_key_phone_priority():
 
 
 def test_dedup_key_email_fallback():
-    """没有电话但有邮件时，dedup_key 应包含业务名称（name_addr: 前缀）"""
+    """Without phone but with email, dedup_key should include business name (name_addr: prefix)"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="Biz",
@@ -87,13 +87,13 @@ def test_dedup_key_email_fallback():
         email="contact@biz.com",
     )
     key = lead.dedup_key()
-    # 实现使用 name_addr: 前缀作为通用 fallback
+    # Implementation uses name_addr: prefix as generic fallback
     assert key.startswith("name_addr:") or key.startswith("email:")
     assert len(key) > 5
 
 
 def test_dedup_key_name_fallback():
-    """无电话无邮件时，dedup_key 应包含业务名称（name_addr: 前缀）"""
+    """Without phone or email, dedup_key should include business name (name_addr: prefix)"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="Unique Restaurant",
@@ -105,47 +105,47 @@ def test_dedup_key_name_fallback():
 
 
 def test_dedup_key_same_phone_different_source():
-    """相同电话不同 source 的线索应有相同 dedup_key（用于跨 Miner 去重）"""
+    """Leads with same phone but different sources should share dedup_key (for cross-Miner dedup)"""
     lead_a = LeadRaw(source=LeadSource.SERPER, business_name="A", industry_keyword="kw", phone="+63-111")
     lead_b = LeadRaw(source=LeadSource.HUNTER, business_name="B", industry_keyword="kw", phone="+63-111")
     assert lead_a.dedup_key() == lead_b.dedup_key()
 
 
 def test_dedup_key_not_empty():
-    """任意线索的 dedup_key 都不应为空"""
+    """dedup_key for any lead should never be empty"""
     lead = LeadRaw(source=LeadSource.SERPER, business_name="X", industry_keyword="y")
     assert lead.dedup_key() != ""
     assert len(lead.dedup_key()) > 3
 
 
-# ── LeadSource 枚举 ───────────────────────────────────────────────────────────
+# ── LeadSource Enum ───────────────────────────────────────────────────────────────────
 
 def test_lead_source_values():
-    """LeadSource 枚举值应存在"""
+    """LeadSource enum values should exist"""
     assert LeadSource.SERPER.value == "serper"
     assert LeadSource.HUNTER.value == "hunter"
 
 
 def test_lead_source_from_string():
-    """可通过字符串构造 LeadSource"""
+    """Can construct LeadSource from string"""
     assert LeadSource("serper") == LeadSource.SERPER
 
 
-# ── review_count Optional 语义（facebook_miner Bug 修复验证）────────────────
+# ── review_count Optional semantics (facebook_miner Bug Fix Verification) ────────────────
 
 def test_review_count_none_preserved():
-    """review_count=None 不应被强制转为 0，Optional 语义必须保留"""
+    """review_count=None should not be forced to 0, Optional semantics must be preserved"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="No Reviews Yet",
         industry_keyword="food",
         review_count=None,
     )
-    assert lead.review_count is None   # None ≠ 0：表示"无数据"而非"零评论"
+    assert lead.review_count is None   # None ≠ 0: means "no data" not "zero reviews"
 
 
 def test_review_count_zero_kept():
-    """review_count=0 应保留为 0（真实的零评论）"""
+    """review_count=0 should be kept as 0 (true zero reviews)"""
     lead = LeadRaw(
         source=LeadSource.SERPER,
         business_name="New Biz",

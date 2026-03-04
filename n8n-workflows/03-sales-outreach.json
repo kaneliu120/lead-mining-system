@@ -20,11 +20,11 @@
         240,
         300
       ],
-      "notes": "工作日早上9点触发外展任务（菲律宾时区 PHT = UTC+8）"
+      "notes": "Trigger outreach at 9AM on weekdays (Philippines time PHT = UTC+8)"
     },
     {
       "parameters": {
-        "jsCode": "// 外展配置\nreturn [{\n  json: {\n    limit: 20,\n    min_score: 65,\n    industry_keyword: null,\n    dry_run: false\n  }\n}];"
+        "jsCode": "// Outreach configuration\nreturn [{\n  json: {\n    limit: 20,\n    min_score: 65,\n    industry_keyword: null,\n    dry_run: false\n  }\n}];"
       },
       "id": "outreach-config",
       "name": "Outreach Config",
@@ -134,7 +134,7 @@
         1120,
         220
       ],
-      "notes": "可替换为 Telegram Bot 或 Slack Webhook 发送通知"
+      "notes": "Can be replaced with Telegram Bot or Slack Webhook for notifications"
     },
     {
       "parameters": {
@@ -211,7 +211,7 @@
   },
   "tags": [],
   "meta": {
-    "description": "工作日上午9点自动运行 LangGraph 外展流程：RAG检索 → 联系人查询 → Gemini邮件生成 → SMTP发送"
+    "description": "Auto-run LangGraph outreach flow at 9AM on weekdays: RAG retrieval → contact lookup → Gemini email generation → SMTP send"
   },
   "id": "43cff21e-094b-410b-94bb-09fff6e3592a"
 }

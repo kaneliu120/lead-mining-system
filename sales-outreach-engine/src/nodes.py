@@ -1,5 +1,5 @@
 """
-LangGraph Nodes - 外展流程各处理节点
+LangGraph Nodes — Processing nodes for the outreach workflow
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from src.state import EmailDraft, OutreachState
 
 logger = logging.getLogger(__name__)
 
-# ── 环境变量 ──────────────────────────────────────────────────────────────────
+# ── Environment variables ─────────────────────────────────────────────────────
 LEAD_MINER_URL  = os.environ.get("LEAD_MINER_URL",  "http://lead-miner:8000")
 GEMINI_API_KEY  = os.environ.get("GEMINI_API_KEY",  "")
 GEMINI_MODEL    = os.environ.get("GEMINI_MODEL",     "gemini-2.5-flash")
@@ -34,7 +34,7 @@ HUNTER_API_KEY  = os.environ.get("HUNTER_API_KEY",   "")
 
 
 def validate_env_vars() -> list[str]:
-    """启动时校验关键环境变量，返回缺失项的警告列表"""
+    """Validate critical environment variables on startup, return a list of warnings for missing ones"""
     warnings = []
     if not GEMINI_API_KEY:
         warnings.append("GEMINI_API_KEY is not set — email generation will be disabled")
@@ -47,15 +47,15 @@ def validate_env_vars() -> list[str]:
     return warnings
 
 
-# ── 启动校验 ────────────────────────────────────────────────────────────────────
+# ── Startup validation ────────────────────────────────────────────────────────
 _startup_warnings = validate_env_vars()
 
-# ── Gemini 模型懒加载单例（避免每次调用重新初始化 + 全局竞态）─────────────────
+# ── Gemini model lazy-loaded singleton (avoid re-initialization per call + global race condition) ──
 _gemini_model = None
 
 
 def _get_gemini_model():
-    """返回全局 Gemini 模型单例，首次调用时初始化。"""
+    """Return the global Gemini model singleton, initializing on first call."""
     global _gemini_model
     if _gemini_model is None:
         if not GEMINI_API_KEY:
@@ -66,7 +66,7 @@ def _get_gemini_model():
             model_name=GEMINI_MODEL,
             generation_config=genai.types.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=8192,   # gemini-2.5-flash 思考模型需要较大空间
+                max_output_tokens=8192,   # gemini-2.5-flash thinking model requires more space
                 response_mime_type="application/json",
             ),
         )
@@ -74,12 +74,12 @@ def _get_gemini_model():
     return _gemini_model
 
 
-# ── asyncpg 连接池懒加载单例（避免 log_outreach 每次创建新连接）──────────────
+# ── asyncpg connection pool lazy-loaded singleton (avoid creating new connection per log_outreach call) ──
 _db_pool = None
 
 
 async def _get_db_pool():
-    """返回全局 asyncpg 连接池单例，首次调用时初始化。"""
+    """Return the global asyncpg connection pool singleton, initializing on first call."""
     global _db_pool
     if _db_pool is None:
         import asyncpg
@@ -93,7 +93,7 @@ async def _get_db_pool():
 
 
 async def close_db_pool() -> None:
-    """关闭全局 asyncpg 连接池（在应用 lifespan shutdown 阶段调用）。"""
+    """Close the global asyncpg connection pool (called during application lifespan shutdown)."""
     global _db_pool
     if _db_pool is not None:
         await _db_pool.close()
@@ -102,8 +102,8 @@ async def close_db_pool() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 1: RAG 检索节点
-# 从 Lead Mining Engine 的 /rag/query 接口查询相似案例
+# Node 1: RAG retrieval node
+# Query similar cases from Lead Mining Engine /rag/query endpoint
 # ─────────────────────────────────────────────────────────────────────────────
 async def retrieve_rag_context(state: OutreachState) -> OutreachState:
     lead = state["lead"]
@@ -126,7 +126,7 @@ async def retrieve_rag_context(state: OutreachState) -> OutreachState:
         logger.warning(f"RAG query failed for '{lead['business_name']}': {exc}")
         results = []
 
-    # 将相似案例构建为 context 字符串
+    # Build similar cases into context string
     context_parts = []
     for r in results:
         meta = r.get("metadata", {})
@@ -143,8 +143,8 @@ async def retrieve_rag_context(state: OutreachState) -> OutreachState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 2: 联系人查询节点
-# 从 Hunter.io API 根据域名查询决策者联系方式（替代 Apollo.io）
+# Node 2: Contact lookup node
+# Query decision-maker contacts by domain from Hunter.io API (replaces Apollo.io)
 # ─────────────────────────────────────────────────────────────────────────────
 async def find_contacts(state: OutreachState) -> OutreachState:
     lead    = state["lead"]
@@ -157,7 +157,8 @@ async def find_contacts(state: OutreachState) -> OutreachState:
             "messages": ["Contacts: skipped (no website or Hunter.io key)"],
         }
 
-    # 从 URL 中安全提取域名（urlparse 正确处理协议前缀，避免 lstrip/replace 的字符误删问题）
+    # Safely extract domain from URL (urlparse handles protocol prefix correctly,
+    # avoiding character deletion issues with lstrip/replace)
     parsed = urlparse(website if website.startswith("http") else f"https://{website}")
     domain = parsed.netloc or parsed.path.split("/")[0]
 
@@ -189,7 +190,7 @@ async def find_contacts(state: OutreachState) -> OutreachState:
             "linkedin":     e.get("linkedin", ""),
         }
         for e in emails
-        if e.get("value")  # 只保留有邮箱的联系人
+        if e.get("value")  # Only keep contacts with email addresses
     ]
 
     return {
@@ -200,11 +201,11 @@ async def find_contacts(state: OutreachState) -> OutreachState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 3: 邮件生成节点（Gemini 2.5 Flash）— 支持多语言 (P3-4)
-# 语言选项: 'en'（纯英语）| 'fil'（菲律宾语为主）| 'mixed'（英菲混合 默认）
+# Node 3: Email generation node (Gemini 2.5 Flash) — multilingual support (P3-4)
+# Language options: 'en' (English only) | 'fil' (Filipino primary) | 'mixed' (English-Filipino mixed, default)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── 英语版 Prompt ────────────────────────────────────────────────────────────
+# ── English Prompt ────────────────────────────────────────────────────────────
 _EMAIL_PROMPT_EN = """\
 You are a professional B2B sales email writer specializing in Philippine SME market.
 Write a SHORT, personalized cold email entirely in English.
@@ -240,7 +241,7 @@ Return ONLY valid JSON:
 }}
 """
 
-# ── 菲律宾语为主版 Prompt ─────────────────────────────────────────────────────
+# ── Filipino-primary Prompt ───────────────────────────────────────────────────
 _EMAIL_PROMPT_FIL = """\
 Ikaw ay isang propesyonal na manunulat ng B2B sales email para sa Philippine SME market.
 Sumulat ng MAIKLING, personalized na cold email na pangunahing nakasulat sa Filipino/Tagalog.
@@ -277,7 +278,7 @@ Ibalik lamang ang valid na JSON:
 }}
 """
 
-# ── 英菲混合版 Prompt（默认，最自然） ─────────────────────────────────────────
+# ── English-Filipino mixed Prompt (default, most natural) ─────────────────────
 _EMAIL_PROMPT_MIXED = """\
 You are a professional B2B sales email writer specializing in Philippine SME market.
 Write a SHORT, personalized cold email mixing natural English and Filipino/Tagalog
@@ -319,7 +320,7 @@ Return ONLY valid JSON:
 }}
 """
 
-# 语言 → Prompt 映射
+# Language → Prompt mapping
 _PROMPT_BY_LANG = {
     "en":    _EMAIL_PROMPT_EN,
     "fil":   _EMAIL_PROMPT_FIL,
@@ -331,9 +332,9 @@ async def generate_email(state: OutreachState) -> OutreachState:
     lead     = state["lead"]
     contacts = state.get("contacts", [])
     rag_ctx  = state.get("rag_context", "")
-    language = state.get("language", "mixed")   # P3-4: 默认英菲混合
+    language = state.get("language", "mixed")   # P3-4: default English-Filipino mixed
 
-    # 选择最佳联系人
+    # Select best contact
     contact = contacts[0] if contacts else {}
     contact_name  = contact.get("name", "Business Owner")
     contact_title = contact.get("title", "")
@@ -364,7 +365,7 @@ async def generate_email(state: OutreachState) -> OutreachState:
             "messages": ["Email: failed (Gemini model unavailable)"],
         }
 
-    # P3-4: 根据语言选择对应 Prompt 模板（fallback 到 mixed）
+    # P3-4: Select prompt template based on language (fallback to mixed)
     prompt_template = _PROMPT_BY_LANG.get(language, _EMAIL_PROMPT_MIXED)
 
     prompt = prompt_template.format(
@@ -385,10 +386,10 @@ async def generate_email(state: OutreachState) -> OutreachState:
     try:
         response = await asyncio.to_thread(model.generate_content, prompt)
         raw = response.text.strip()
-        # 去除 markdown code block
+        # Remove markdown code block
         if raw.startswith("```"):
             raw = raw.split("```")[1].removeprefix("json").strip()
-        # 思考模型可能在 JSON 前附加思考文本，用 regex 提取第一个 JSON 对象
+        # Thinking model may prepend reasoning text before JSON, use regex to extract the first JSON object
         if not raw.startswith("{"):
             m = re.search(r'\{.*\}', raw, re.DOTALL)
             if m:
@@ -419,7 +420,7 @@ async def generate_email(state: OutreachState) -> OutreachState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 4: 邮件发送节点（SMTP / Gmail）
+# Node 4: Email send node (SMTP / Gmail)
 # ─────────────────────────────────────────────────────────────────────────────
 async def send_email(state: OutreachState) -> OutreachState:
     draft = state.get("email_draft")
@@ -435,13 +436,13 @@ async def send_email(state: OutreachState) -> OutreachState:
             "messages": ["Send: failed (no SMTP credentials)"],
         }
 
-    # 构建邮件
+    # Build email
     msg = MIMEMultipart("alternative")
     msg["Subject"] = draft["subject"]
     msg["From"]    = f"{SENDER_NAME} <{SMTP_USER}>"
     msg["To"]      = f"{draft['to_name']} <{draft['to_email']}>"
 
-    # 纯文本 + HTML（简单包装）
+    # Plain text + HTML (simple wrapper)
     text_part = MIMEText(draft["body"], "plain", "utf-8")
     html_body = draft["body"].replace("\n", "<br>")
     html_part = MIMEText(
@@ -451,7 +452,7 @@ async def send_email(state: OutreachState) -> OutreachState:
     msg.attach(html_part)
 
     try:
-        # SMTP 是同步的，放到线程池；设置连接超时防止永久挂起
+        # SMTP is synchronous, run in thread pool; set connection timeout to prevent hanging indefinitely
         def _send():
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
                 server.ehlo()
@@ -483,7 +484,7 @@ async def send_email(state: OutreachState) -> OutreachState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Node 5: 记录发送日志（写回 PostgreSQL outreach_log）
+# Node 5: Log send record (write back to PostgreSQL outreach_log)
 # ─────────────────────────────────────────────────────────────────────────────
 async def log_outreach(state: OutreachState) -> OutreachState:
     result = state.get("send_result")
@@ -510,10 +511,10 @@ async def log_outreach(state: OutreachState) -> OutreachState:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 条件路由函数
+# Conditional routing function
 # ─────────────────────────────────────────────────────────────────────────────
 def should_send(state: OutreachState) -> str:
-    """email_draft 存在且无错误才发送，否则结束"""
+    """Send only if email_draft exists and there are no errors, otherwise end"""
     if state.get("skipped"):
         return "end"
     if state.get("error"):

@@ -1,6 +1,6 @@
 """
-CsvWriter — CSV 导出工具
-轻量无依赖的 CSV 写入，适合批量数据导出供销售团队使用
+CsvWriter — CSV export utility
+Lightweight, dependency-free CSV writer for bulk data export for sales teams
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.models.lead import EnrichedLead, LeadRaw
 
 logger = logging.getLogger(__name__)
 
-# CSV 列顺序
+# CSV column order
 _RAW_FIELDS = [
     "source", "business_name", "industry_keyword",
     "address", "phone", "website", "email",
@@ -32,7 +32,7 @@ _ENRICHED_EXTRA = [
 
 class CsvWriter:
     """
-    将 LeadRaw / EnrichedLead 列表写为 UTF-8 BOM CSV（兼容 Excel 直接打开）。
+    Write a list of LeadRaw / EnrichedLead to UTF-8 BOM CSV (compatible with direct Excel open).
     """
 
     @staticmethod
@@ -41,8 +41,8 @@ class CsvWriter:
         output: Union[str, Path, None] = None,
     ) -> str:
         """
-        写原始线索 CSV。
-        output=None 时返回 CSV 字符串；否则写入文件。
+        Write raw leads CSV.
+        Returns CSV string when output=None; otherwise writes to file.
         """
         buf = io.StringIO()
         writer = csv.DictWriter(buf, fieldnames=_RAW_FIELDS, extrasaction="ignore")
@@ -63,7 +63,7 @@ class CsvWriter:
                 "google_maps_url":  lead.google_maps_url or "",
             })
 
-        content = "\ufeff" + buf.getvalue()     # UTF-8 BOM（Excel 友好）
+        content = "\ufeff" + buf.getvalue()     # UTF-8 BOM (Excel-friendly)
         if output:
             Path(output).write_text(content, encoding="utf-8-sig")
             logger.info(f"CsvWriter: wrote {len(leads)} raw leads to {output}")
@@ -74,7 +74,7 @@ class CsvWriter:
         leads: List[EnrichedLead],
         output: Union[str, Path, None] = None,
     ) -> str:
-        """写富化线索 CSV（包含 AI 评分和外展建议）"""
+        """Write enriched leads CSV (includes AI score and outreach recommendation)"""
         fields = _RAW_FIELDS + _ENRICHED_EXTRA
         buf = io.StringIO()
         writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")

@@ -1,6 +1,6 @@
 """
-Config — 配置加载与插件工厂
-从 YAML + 环境变量构建所有 Miner 实例
+Config — configuration loader and plugin factory
+Builds all Miner instances from YAML + environment variables
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from app.writers.postgres_writer import PostgresWriter
 from app.writers.chroma_writer import ChromaWriter
 
 
-# ── 环境变量快捷读取 ────────────────────────────────────────────────────────────
+# ── Environment variable helpers ────────────────────────────────────────────────
 def _env(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
@@ -43,7 +43,7 @@ def _env_bool(key: str, default: bool = True) -> bool:
     return default
 
 
-# ── 插件工厂字典 ────────────────────────────────────────────────────────────────
+# ── Plugin factory dictionary ───────────────────────────────────────────────────
 FACTORY: Dict[str, Any] = {
     "serper": {
         "config_cls":  SerperConfig,
@@ -54,7 +54,7 @@ FACTORY: Dict[str, Any] = {
     "hunter": {
         "config_cls":  HunterConfig,
         "miner_cls":   HunterMiner,
-        "env_key":     "HUNTER_API_KEY",   # https://hunter.io 免费注册
+        "env_key":     "HUNTER_API_KEY",   # https://hunter.io free registration
         "phase":       1,
     },
     "google_cse": {
@@ -66,7 +66,7 @@ FACTORY: Dict[str, Any] = {
     "sec_ph": {
         "config_cls":  SECPhConfig,
         "miner_cls":   SECPhilippinesMiner,
-        "env_key":     None,            # 无需 API Key
+        "env_key":     None,            # No API Key required
         "phase":       2,
     },
     "reddit": {
@@ -90,13 +90,13 @@ FACTORY: Dict[str, Any] = {
     "dti_bnrs": {
         "config_cls":  DTIBNRSConfig,
         "miner_cls":   DTIBNRSMiner,
-        "env_key":     None,      # 无需 API Key，公开爬虫
+        "env_key":     None,      # No API Key required — public scraper
         "phase":       3,
     },
     "yellow_pages": {
         "config_cls":  YellowPagesConfig,
         "miner_cls":   YellowPagesMiner,
-        "env_key":     None,        # 无需 API Key，基于 Playwright
+        "env_key":     None,        # No API Key required — Playwright-based
         "phase":       2,
     },
 }
@@ -104,10 +104,10 @@ FACTORY: Dict[str, Any] = {
 
 def build_miners_from_config(config_path: Optional[str] = None) -> List:
     """
-    从 config/miners.yaml（可选）+ 环境变量构建 Miner 实例列表。
-    YAML 提供细粒度参数，环境变量提供 API Key 和启用开关。
+    Build a list of Miner instances from config/miners.yaml (optional) + environment variables.
+    YAML provides fine-grained parameters; environment variables provide API Keys and enable switches.
     """
-    # 加载 YAML（可选）
+    # Load YAML (optional)
     yaml_data: Dict[str, Any] = {}
     if config_path and yaml:
         p = Path(config_path)
@@ -119,7 +119,7 @@ def build_miners_from_config(config_path: Optional[str] = None) -> List:
     for name, meta in FACTORY.items():
         section: Dict[str, Any] = yaml_data.get("miners", {}).get(name, {})
 
-        # 从 YAML 或环境变量读取 enabled
+        # Read 'enabled' from YAML or environment variable
         enabled_from_yaml = section.get("enabled", None)
         enabled_env = os.environ.get(f"{name.upper()}_ENABLED", "").lower()
         if enabled_env in ("0", "false"):
@@ -129,34 +129,34 @@ def build_miners_from_config(config_path: Optional[str] = None) -> List:
         elif enabled_from_yaml is not None:
             enabled = bool(enabled_from_yaml)
         else:
-            # Phase 1 默认启用，Phase 2-3 默认禁用
+            # Phase 1 enabled by default, Phase 2-3 disabled by default
             enabled = meta["phase"] == 1
 
         # API Key
         api_key = ""
         if meta["env_key"]:
             api_key = _env(meta["env_key"])
-            # 如果需要 API Key 但没有提供，禁用并跳过
+            # If API Key required but not provided, disable and skip
             if not api_key:
                 enabled = False
 
-        # 构建 Config 实例
+        # Build Config instance
         config_kwargs: Dict[str, Any] = {
             "name":    name,
             "enabled": enabled,
-            **section,                   # YAML 中所有字段会 override
+            **section,                   # All fields in YAML will override
         }
         if api_key:
             config_kwargs["api_key"] = api_key
 
-        # 特殊字段处理
+        # Special field handling
         if name == "google_cse":
             config_kwargs.setdefault("cx", _env("GOOGLE_CSE_CX"))
         if name == "reddit":
             config_kwargs.setdefault("client_id",     _env("REDDIT_CLIENT_ID"))
             config_kwargs.setdefault("client_secret", _env("REDDIT_CLIENT_SECRET"))
 
-        # 过滤 Config 不支持的字段
+        # Filter out fields not supported by Config
         config_cls  = meta["config_cls"]
         valid_keys  = {f.name for f in config_cls.__dataclass_fields__.values()} \
                       if hasattr(config_cls, "__dataclass_fields__") else set()
@@ -171,12 +171,12 @@ def build_miners_from_config(config_path: Optional[str] = None) -> List:
 
 
 def build_orchestrator(config_path: Optional[str] = None) -> MiningOrchestrator:
-    """工厂函数：构建并注册所有 Miner 的 Orchestrator"""
+    """Factory function: build and register Orchestrator with all Miners"""
     orchestrator = MiningOrchestrator(max_concurrent_miners=4)
     miners = build_miners_from_config(config_path)
 
     for miner in miners:
-        # Serper 作为 google_cse 的 Fallback
+        # Serper as Fallback for google_cse
         if miner.source_name.value == "google_cse":
             orchestrator.register(miner, fallback_for="serper")
         else:

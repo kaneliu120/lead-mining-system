@@ -1,6 +1,6 @@
 """
-BrowserBasedMiner — 基于 Playwright 的爬虫插件基类
-用于没有 API 的数据源（PhilGEPS、DTI BNRS、黄页等）
+BrowserBasedMiner — Playwright-based crawler plugin base class
+For data sources without an API (PhilGEPS, DTI BNRS, Yellow Pages, etc.)
 """
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from app.miners.base import BaseMiner, MinerConfig
 
 class BrowserBasedMiner(BaseMiner):
     """
-    基于 Playwright 的数据源插件基类。
+    Playwright-based data source plugin base class.
 
-    必须以 headless=True 运行，兼容 Docker 容器环境。
-    子类通过 self._new_page() 获取新的浏览器页面。
+    Must run with headless=True for Docker container compatibility.
+    Subclasses obtain a new browser page via self._new_page().
     """
 
     def __init__(self, config: MinerConfig):
@@ -22,14 +22,14 @@ class BrowserBasedMiner(BaseMiner):
         self._browser = None
         self._playwright = None
 
-    # ── 生命周期 ──────────────────────────────────────────────────────────────
+    # ── Lifecycle ──────────────────────────────────────────────────────────────
 
     async def on_startup(self) -> None:
         from playwright.async_api import async_playwright
 
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
-            headless=True,                          # Docker 必须 headless
+            headless=True,                          # Docker requires headless
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -46,13 +46,13 @@ class BrowserBasedMiner(BaseMiner):
             await self._playwright.stop()
         self.logger.info(f"{self.__class__.__name__} browser closed")
 
-    # ── 工具方法 ──────────────────────────────────────────────────────────────
+    # ── Utility methods ─────────────────────────────────────────────────────────
 
     async def _new_page(self):
         """
-        创建新的浏览器页面。
+        Create a new browser page.
 
-        返回 (context, page)调用方注意关闭 context（关闭 context 会同时关闭其下所有 page）：
+        Returns (context, page). Callers must close the context (closing context also closes all its pages):
 
             context, page = await self._new_page()
             try:

@@ -1,6 +1,6 @@
 """
-SerperMiner 单元测试
-使用 httpx mock 避免真实 API 调用
+SerperMiner Unit Tests
+Uses httpx mock to avoid real API calls
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def serper_miner(serper_config):
 
 @pytest.mark.asyncio
 async def test_mine_returns_leads(serper_miner):
-    """mine() 应该将 API 响应转换为 LeadRaw 对象"""
+    """mine() should convert API response into LeadRaw objects"""
     mock_response = MagicMock()
     mock_response.json.return_value = MOCK_SERPER_RESPONSE
 
@@ -75,7 +75,7 @@ async def test_mine_returns_leads(serper_miner):
 
 @pytest.mark.asyncio
 async def test_mine_dedup_key_not_empty(serper_miner):
-    """dedup_key 不应该为空"""
+    """dedup_key should not be empty"""
     mock_response = MagicMock()
     mock_response.json.return_value = MOCK_SERPER_RESPONSE
 
@@ -90,7 +90,7 @@ async def test_mine_dedup_key_not_empty(serper_miner):
 
 @pytest.mark.asyncio
 async def test_mine_respects_limit(serper_miner):
-    """mine() 不应超过 limit 数量"""
+    """mine() should not exceed the limit count"""
     mock_response = MagicMock()
     mock_response.json.return_value = MOCK_SERPER_RESPONSE   # 2 results
 
@@ -107,7 +107,7 @@ async def test_mine_respects_limit(serper_miner):
 
 @pytest.mark.asyncio
 async def test_mine_empty_response(serper_miner):
-    """空响应不应抛异常"""
+    """Empty response should not raise an exception"""
     mock_response = MagicMock()
     mock_response.json.return_value = {"places": []}
 

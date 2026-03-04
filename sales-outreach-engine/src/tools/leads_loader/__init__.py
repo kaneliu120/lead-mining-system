@@ -1,6 +1,6 @@
 """
-outreach_log 表 DDL — 在 lead-mining-engine init_tables 时一并创建
-或在 sales-outreach-engine 启动时单独创建
+outreach_log table DDL — created together during lead-mining-engine init_tables
+or created separately when sales-outreach-engine starts
 """
 
 CREATE_OUTREACH_LOG = """

@@ -1,6 +1,6 @@
 """
-YellowPagesMiner — Phase 2 菲律宾黄页爬虫插件
-从 www.yellowpages.ph 抓取商家名称、电话、地址和网站（Playwright）
+YellowPagesMiner — Phase 2 Philippines Yellow Pages scraping plugin
+Scrapes business name, phone, address and website from www.yellowpages.ph (Playwright)
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from app.models.lead import LeadRaw, LeadSource
 
 _BASE_URL = "https://www.yellowpages.ph"
 
-# 各字段可能的 CSS 选择器（多候选，增强鲁棒性）
+# Possible CSS selectors for each field (multiple candidates, enhanced robustness)
 _ITEM_SELECTORS = [
     "div.listing-item",
     ".company-item",
@@ -47,20 +47,20 @@ _CATEGORY_SELECTORS = [
 class YellowPagesConfig(MinerConfig):
     base_url:              str = _BASE_URL
     timeout_seconds:       int = 30
-    rate_limit_per_minute: int = 10         # 礼貌爬取，避免 IP 被封
-    page_delay_seconds:    float = 2.5       # 翻页间隔
+    rate_limit_per_minute: int = 10         # Polite scraping, avoid IP being banned
+    page_delay_seconds:    float = 2.5       # Page turn interval
 
 
 class YellowPagesMiner(BrowserBasedMiner):
     """
-    菲律宾黄页（www.yellowpages.ph）爬虫插件。
+    Philippines Yellow Pages (www.yellowpages.ph) scraping plugin.
 
-    基于 Playwright headless 浏览器采集商家信息：
-    - 商家名称、电话、地址
-    - 行业分类
-    - 官网 URL（如有）
+    Mines business information using Playwright headless browser:
+    - Business name, phone, address
+    - Industry classification
+    - Website URL (if available)
 
-    注意：无需 API Key，但需遵守网站 robots.txt 和合理使用频率。
+    Note: No API Key required, but must comply with website robots.txt and reasonable usage frequency.
     """
 
     def __init__(self, config: YellowPagesConfig):
@@ -85,7 +85,7 @@ class YellowPagesMiner(BrowserBasedMiner):
             collected = 0
 
             while collected < limit:
-                # 构建搜索 URL
+                # Build search URL
                 kw_enc  = keyword.replace(" ", "+")
                 loc_enc = location.replace(" ", "+") if location else ""
                 url = f"{self._cfg.base_url}/search?keyword={kw_enc}"
@@ -98,12 +98,12 @@ class YellowPagesMiner(BrowserBasedMiner):
 
                 try:
                     await page.goto(url, wait_until="domcontentloaded", timeout=self._cfg.timeout_seconds * 1000)
-                    await page.wait_for_timeout(2000)  # 等待 JS 渲染
+                    await page.wait_for_timeout(2000)  # Wait for JS rendering
                 except Exception as e:
                     self.logger.warning(f"YellowPages: navigation failed: {e}")
                     break
 
-                # 等待任意匹配的商家列表容器出现
+                # Wait for any matching business listing container to appear
                 found_container = False
                 for sel in _ITEM_SELECTORS:
                     try:
@@ -120,7 +120,7 @@ class YellowPagesMiner(BrowserBasedMiner):
                     )
                     break
 
-                # 抓取所有商家条目
+                # Scrape all business entries
                 items = await page.query_selector_all(
                     ", ".join(_ITEM_SELECTORS)
                 )
@@ -136,24 +136,24 @@ class YellowPagesMiner(BrowserBasedMiner):
                     address  = await self._first_text(item, _ADDRESS_SELECTORS)
                     category = await self._first_text(item, _CATEGORY_SELECTORS)
 
-                    # 清洗电话号码
+                    # Clean phone number
                     if phone:
                         phone = re.sub(r"[^\d\+\-\(\) ]", "", phone)[:20].strip()
-                    # tel: 链接中直接取号码
+                    # Extract number directly from tel: link
                     if not phone:
                         tel_el = await item.query_selector("a[href^='tel:']")
                         if tel_el:
                             href = await tel_el.get_attribute("href") or ""
                             phone = href.replace("tel:", "").strip()[:20]
 
-                    # 邮箱（mailto: 链接）
+                    # Email (mailto: link)
                     email = ""
                     mailto_el = await item.query_selector("a[href^='mailto:']")
                     if mailto_el:
                         href = await mailto_el.get_attribute("href") or ""
                         email = href.replace("mailto:", "").split("?")[0].strip()
 
-                    # 官网链接（排除 yellowpages.ph 自身）
+                    # Website link (excluding yellowpages.ph itself)
                     website = ""
                     for ws in await item.query_selector_all("a[href^='http']"):
                         href = await ws.get_attribute("href") or ""
@@ -184,22 +184,22 @@ class YellowPagesMiner(BrowserBasedMiner):
                     )
                     collected += 1
 
-                # 判断是否有下一页
+                # Check if there is a next page
                 if not await self._has_next_page(page):
                     break
 
                 page_num += 1
-                # 礼貌间隔
+                # Polite interval
                 await asyncio.sleep(self._cfg.page_delay_seconds)
 
         finally:
             await context.close()
 
-    # ── 辅助方法 ───────────────────────────────────────────────────────────────
+    # ── Helper methods ───────────────────────────────────────────────────────────────
 
     @staticmethod
     async def _first_text(element, selectors: list[str]) -> str:
-        """依次尝试多个 CSS 选择器，返回第一个非空文本"""
+        """Try multiple CSS selectors in order, return first non-empty text"""
         for sel in selectors:
             try:
                 el = await element.query_selector(sel)
@@ -213,7 +213,7 @@ class YellowPagesMiner(BrowserBasedMiner):
 
     @staticmethod
     async def _has_next_page(page) -> bool:
-        """检测是否存在（且未被禁用的）下一页按钮"""
+        """Detect if a (non-disabled) next page button exists"""
         try:
             for sel in [
                 "a.next-page:not(.disabled)",
@@ -229,7 +229,7 @@ class YellowPagesMiner(BrowserBasedMiner):
         return False
 
     async def validate_config(self) -> bool:
-        return True     # 无需 API Key
+        return True     # No API Key required
 
     async def health_check(self) -> MinerHealth:
         context, page = await self._new_page()

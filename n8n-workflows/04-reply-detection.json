@@ -46,7 +46,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 过滤出来自 outreach_log 中目标邮箱的回复\nconst emails = $input.all();\nconst replies = emails.filter(item => {\n  const from    = item.json.from || '';\n  const subject = (item.json.subject || '').toLowerCase();\n  const body    = (item.json.text || item.json.snippet || '').toLowerCase();\n  \n  // 排除自动回复\n  const isAutoReply = [\n    'out of office', 'auto-reply', 'automatic reply',\n    'vacation', 'away from', 'noreply',\n  ].some(kw => subject.includes(kw) || body.includes(kw));\n  \n  if (isAutoReply) return false;\n  \n  // 检测正面回复意向\n  const positiveSignals = [\n    'interested', 'yes', 'sure', 'please', 'tell me more',\n    'call', 'meeting', 'schedule', 'demo', 'price', 'cost',\n    'how much', 'magkano', 'tara', 'ok', 'pwede',\n  ];\n  const hasPositive = positiveSignals.some(kw => body.includes(kw));\n  return true; // 返回所有未读邮件，在下一节点分类\n});\n\nconsole.log(`Emails to process: ${replies.length}`);\nreturn replies.slice(0, 20);"
+        "jsCode": "// Filter replies from target emails in outreach_log\nconst emails = $input.all();\nconst replies = emails.filter(item => {\n  const from    = item.json.from || '';\n  const subject = (item.json.subject || '').toLowerCase();\n  const body    = (item.json.text || item.json.snippet || '').toLowerCase();\n  \n  // Exclude auto-replies\n  const isAutoReply = [\n    'out of office', 'auto-reply', 'automatic reply',\n    'vacation', 'away from', 'noreply',\n  ].some(kw => subject.includes(kw) || body.includes(kw));\n  \n  if (isAutoReply) return false;\n  \n  // Detect positive reply intent\n  const positiveSignals = [\n    'interested', 'yes', 'sure', 'please', 'tell me more',\n    'call', 'meeting', 'schedule', 'demo', 'price', 'cost',\n    'how much', 'magkano', 'tara', 'ok', 'pwede',\n  ];\n  const hasPositive = positiveSignals.some(kw => body.includes(kw));\n  return true; // Return all unread emails, classify in next node\n});\n\nconsole.log(`Emails to process: ${replies.length}`);\nreturn replies.slice(0, 20);"
       },
       "id": "filter-replies",
       "name": "Filter & Parse Replies",
@@ -169,7 +169,7 @@
         1560,
         220
       ],
-      "notes": "替换为 Telegram Bot 或 Slack 推送紧急通知"
+      "notes": "Replace with Telegram Bot or Slack for urgent notification push"
     },
     {
       "parameters": {
@@ -198,7 +198,7 @@
         560
       ],
       "continueOnFail": true,
-      "notes": "更新 outreach_log.status 字段记录回复状态"
+      "notes": "Update outreach_log.status field to record reply status"
     }
   ],
   "connections": {
@@ -294,7 +294,7 @@
   },
   "tags": [],
   "meta": {
-    "description": "每2小时检查未读邮件，用 Gemini 分类回复意向，热门线索立即推送告警"
+    "description": "Check unread emails every 2 hours — use Gemini to classify reply intent, push alerts for hot leads immediately"
   },
   "id": "357b1ca7-4294-4f04-81ad-63200eb64b7f"
 }

@@ -1,6 +1,6 @@
 """
-RedditMiner — Phase 2 社交媒体数据插件
-PRAW SDK，免费 60 req/min，从菲律宾商业 subreddit 挖掘线索
+RedditMiner — Phase 2 Social Media Data Plugin
+PRAW SDK, free 60 req/min, mines leads from Philippines business subreddits
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import AsyncIterator, List, Optional
 from app.miners.base import BaseMiner, MinerConfig, MinerHealth
 from app.models.lead import LeadRaw, LeadSource
 
-# 菲律宾商业相关关键词（用于帖子过滤）
+# Philippines business-related keywords (for post filtering)
 _BIZ_KEYWORDS = [
     "business", "store", "shop", "restaurant", "service", "company",
     "startup", "negosyo", "tindahan", "sari-sari", "franchise",
@@ -30,16 +30,16 @@ class RedditConfig(MinerConfig):
             "Philippines", "phinvest", "Entrepreneur", "smallbusiness",
         ]
     )
-    rate_limit_per_minute: int = 55         # 官方 60/min，留安全余量
+    rate_limit_per_minute: int = 55         # Official 60/min, with safety margin
 
 
 class RedditMiner(BaseMiner):
     """
-    Reddit API 插件（PRAW）。
-    从菲律宾商业相关 subreddit 中提取 SME 线索。
+    Reddit API plugin (PRAW).
+    Extracts SME leads from Philippines business-related subreddits.
 
-    ⚠️ 注意：Reddit ToS 禁止大规模商业采集。
-    建议仅用于市场调研和趋势分析，而非直接联系人获取。
+    ⚠️ Note: Reddit ToS prohibits large-scale commercial scraping.
+    Recommended only for market research and trend analysis, not direct contact acquisition.
     """
 
     def __init__(self, config: RedditConfig):
@@ -81,7 +81,7 @@ class RedditMiner(BaseMiner):
             if collected >= limit:
                 break
 
-            # PRAW 是同步 SDK，在线程池中运行
+            # PRAW is a synchronous SDK — run in thread pool
             try:
                 submissions = await asyncio.to_thread(
                     lambda sn=sub_name: list(
@@ -125,7 +125,7 @@ class RedditMiner(BaseMiner):
 
     @staticmethod
     def _extract_business_name(submission, keyword: str) -> str:
-        """从帖子中提取商业名称（启发式规则，可后续换成 Gemini NER）"""
+        """Extract business name from a post (heuristic rules — can be replaced with Gemini NER)"""
         title_lower = submission.title.lower()
         if any(kw in title_lower for kw in _BIZ_KEYWORDS):
             return submission.title[:150]
@@ -135,7 +135,7 @@ class RedditMiner(BaseMiner):
 
     @staticmethod
     def _extract_url(submission) -> str:
-        """从帖子中提取可能的商业网站 URL"""
+        """Extract possible business website URL from a post"""
         if submission.url and not submission.is_self:
             if "reddit.com" not in submission.url:
                 return submission.url

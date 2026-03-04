@@ -5,10 +5,10 @@ asyncpg==0.30.0
 httpx==0.27.2
 python-dotenv==1.0.1
 
-# LangGraph（外展流程编排）
+# LangGraph (outreach flow orchestration)
 langgraph==0.2.53
 langchain-google-genai==2.0.6
 langchain-community==0.3.8
 
-# Gemini SDK（nodes.py 直接使用）
+# Gemini SDK (used directly by nodes.py)
 google-generativeai==0.8.3

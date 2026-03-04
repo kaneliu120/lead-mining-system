@@ -1,6 +1,6 @@
 """
-PostgresWriter — 持久化存储层
-使用 asyncpg 高性能异步写入，支持 UPSERT 去重
+PostgresWriter — persistent storage layer
+High-performance async writes via asyncpg, supports UPSERT deduplication
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.models.lead import EnrichedLead, LeadRaw
 
 logger = logging.getLogger(__name__)
 
-# ── DDL，首次运行自动建表 ──────────────────────────────────────────────────────
+# ── DDL — auto-create tables on first run ─────────────────────────────────────
 _CREATE_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS leads_raw (
     id              BIGSERIAL PRIMARY KEY,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS outreach_log (
 CREATE INDEX IF NOT EXISTS idx_outreach_log_lead ON outreach_log(lead_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_log_sent ON outreach_log(sent_at DESC);
 
--- P2-5：外展反馈表，用于评分模型优化
+-- P2-5: Outreach feedback table for scoring model optimization
 CREATE TABLE IF NOT EXISTS score_feedback (
     id          BIGSERIAL    PRIMARY KEY,
     lead_id     BIGINT       NOT NULL REFERENCES leads_raw(id) ON DELETE CASCADE,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS score_feedback (
 CREATE INDEX IF NOT EXISTS idx_score_feedback_lead    ON score_feedback(lead_id);
 CREATE INDEX IF NOT EXISTS idx_score_feedback_outcome ON score_feedback(outcome);
 
--- 面板配置持久化表（API Key、Miner 开关等）
+-- Dashboard config persistence table (API Key, Miner toggles, etc.)
 CREATE TABLE IF NOT EXISTS app_settings (
     key         TEXT        PRIMARY KEY,
     value       TEXT        NOT NULL,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 class PostgresWriter:
     """
-    asyncpg 连接池封装，提供 leads_raw / leads_enriched / contacts 三表的 CRUD。
+    asyncpg connection pool wrapper providing CRUD for leads_raw / leads_enriched / contacts tables.
     """
 
     def __init__(self, dsn: str, min_size: int = 2, max_size: int = 10):
@@ -128,7 +128,7 @@ class PostgresWriter:
         logger.info(f"PostgresWriter pool created (min={self.min_size}, max={self.max_size})")
 
     async def init_tables(self) -> None:
-        """首次启动建表（幂等）"""
+        """Create tables on first startup (idempotent)"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected. Call connect() first.")
         async with self._pool.acquire() as conn:
@@ -137,8 +137,8 @@ class PostgresWriter:
 
     async def upsert_leads(self, leads: List[LeadRaw]) -> Tuple[int, int]:
         """
-        批量 UPSERT leads_raw（去重键：dedup_key）。
-        返回 (inserted, skipped)
+        Batch UPSERT leads_raw (dedup key: dedup_key).
+        Returns (inserted, skipped)
         """
         if not leads or self._pool is None:
             return 0, 0
@@ -192,7 +192,7 @@ class PostgresWriter:
         return inserted, skipped
 
     async def upsert_enriched(self, leads: List[EnrichedLead]) -> int:
-        """更新富化字段"""
+        """Update enrichment fields"""
         if not leads or self._pool is None:
             return 0
 
@@ -249,11 +249,11 @@ class PostgresWriter:
         source: Optional[str] = None,
         lead_id: Optional[int] = None,
     ) -> List[dict]:
-        """查询已富化线索"""
+        """Query enriched leads"""
         if self._pool is None:
             return []
 
-        # 输入校验（纵深防御）
+        # Input validation (defence in depth)
         limit = max(1, min(limit, 500))
         offset = max(0, offset)
         min_score = max(0, min(min_score, 100))
@@ -308,8 +308,8 @@ class PostgresWriter:
         industry_keyword: Optional[str] = None,
     ) -> List[dict]:
         """
-        查询尚未经过 AI 富化的 leads_raw 记录（leads_enriched 中无对应行）。
-        供 /enrich 端点使用，避免重复富化。
+        Query leads_raw records not yet AI-enriched (no corresponding row in leads_enriched).
+        Used by the /enrich endpoint to avoid duplicate enrichment.
         """
         if self._pool is None:
             return []
@@ -346,9 +346,9 @@ class PostgresWriter:
         status: str,
     ) -> int:
         """
-        根据邮箱地址更新 outreach_log 状态（如：interested / not_interested）。
-        供 n8n 回复检测工作流调用。
-        返回受影响的行数。
+        Update outreach_log status by email address (e.g. interested / not_interested).
+        Called by n8n reply-detection workflow.
+        Returns number of affected rows.
         """
         if self._pool is None:
             return 0
@@ -368,7 +368,7 @@ class PostgresWriter:
                 status,
                 email,
             )
-        # asyncpg execute() 返回 "UPDATE N" 字符串
+        # asyncpg execute() returns an "UPDATE N" string
         try:
             affected = int(result.split()[-1])
         except Exception:
@@ -381,10 +381,10 @@ class PostgresWriter:
             await self._pool.close()
             logger.info("PostgresWriter pool closed")
 
-    # ── 管理面板：app_settings CRUD ─────────────────────────────────────────
+    # ── Admin Panel: app_settings CRUD ──────────────────────────────────────
 
     async def get_setting(self, key: str, default: str = "") -> str:
-        """读取单个配置项"""
+        """Read a single configuration item"""
         if self._pool is None:
             return default
         async with self._pool.acquire() as conn:
@@ -394,7 +394,7 @@ class PostgresWriter:
         return row["value"] if row else default
 
     async def set_setting(self, key: str, value: str) -> None:
-        """写入/更新单个配置项（UPSERT）"""
+        """Write/update a single configuration item (UPSERT)"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected")
         async with self._pool.acquire() as conn:
@@ -410,17 +410,17 @@ class PostgresWriter:
             )
 
     async def get_all_settings(self) -> dict:
-        """读取所有配置项，返回 {key: value} 字典"""
+        """Read all configuration items, returns {key: value} dict"""
         if self._pool is None:
             return {}
         async with self._pool.acquire() as conn:
             rows = await conn.fetch("SELECT key, value FROM app_settings")
         return {row["key"]: row["value"] for row in rows}
 
-    # ── P2-5 反馈与评分统计 ─────────────────────────────────────────────────
+    # ── P2-5 Feedback and Scoring Statistics ──────────────────────────────────
 
     async def insert_feedback(self, lead_id: int, outcome: str, notes: str = "") -> None:
-        """记录外展结果反馈（replies / converted / bounced 等）"""
+        """Record outreach result feedback (replies / converted / bounced, etc.)"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected")
         await self._pool.execute(
@@ -429,7 +429,7 @@ class PostgresWriter:
         )
 
     async def fetch_funnel_stats(self) -> dict:
-        """读取漏斗统计指标（raw → enriched → outreached），供 /stats 端点使用"""
+        """Fetch funnel statistics (raw → enriched → outreached) for the /stats endpoint"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected")
         row = await self._pool.fetchrow("""
@@ -446,7 +446,7 @@ class PostgresWriter:
         return dict(row)
 
     async def fetch_scoring_stats(self) -> tuple:
-        """按行业统计转化率，供 /scoring/stats 端点使用"""
+        """Compute conversion rates by industry for the /scoring/stats endpoint"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected")
         rows = await self._pool.fetch("""
@@ -477,7 +477,7 @@ class PostgresWriter:
         return [dict(r) for r in rows], dict(summary_row)
 
     async def fetch_low_score_positive_leads(self, min_positives: int = 3) -> list:
-        """找出有正向反馈但评分偏低（< 65）的线索，供评分校正使用"""
+        """Find leads with positive feedback but low scores (< 65) for score recalibration"""
         if self._pool is None:
             raise RuntimeError("PostgresWriter not connected")
         rows = await self._pool.fetch(

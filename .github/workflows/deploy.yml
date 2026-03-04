@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       domain:
-        description: '自定义域名（留空则自动生成 nip.io 域名）'
+        description: 'Custom domain (leave empty to auto-generate nip.io domain)'
         required: false
         default: ''
 
@@ -15,7 +15,7 @@ env:
   IMAGE_PREFIX: ghcr.io/kaneliu120/lead-mining-system
 
 jobs:
-  # ── 构建并推送镜像到 GitHub Container Registry ──────────────────────────────
+  # ── Build and push images to GitHub Container Registry ───────────────────────
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
@@ -56,7 +56,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── SSH 部署到 Azure VM ────────────────────────────────────────────────────
+  # ── SSH deploy to Azure VM ────────────────────────────────────────────────────
   deploy:
     runs-on: ubuntu-latest
     needs: build-and-push
@@ -72,7 +72,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key:      ${{ secrets.VM_SSH_KEY }}
           script: |
-            # 进入项目目录（首次部署时 git clone，已存在但非 git 仓库则修复）
+            # Enter project directory (git clone on first deploy, fix if exists but not a git repo)
             if [ ! -d "/opt/lead-mining-system/.git" ]; then
               if [ -d "/opt/lead-mining-system" ]; then
                 cp /opt/lead-mining-system/.env /tmp/lead-mining-backup.env 2>/dev/null || true
@@ -86,14 +86,14 @@ jobs:
             cd /opt/lead-mining-system
             git pull origin main
 
-            # 登录 GHCR
+            # Login to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u kaneliu120 --password-stdin
 
-            # 拉取最新镜像
+            # Pull latest images
             docker pull ghcr.io/kaneliu120/lead-mining-system/lead-miner:latest
             docker pull ghcr.io/kaneliu120/lead-mining-system/sales-outreach:latest
 
-            # 用生产配置（预构建镜像）零停机滚动重启
+            # Zero-downtime rolling restart with production config (pre-built images)
             docker compose -f docker-compose.prod.yml pull lead-miner sales-outreach
             docker compose -f docker-compose.prod.yml up -d postgres chromadb
             sleep 15
@@ -101,10 +101,10 @@ jobs:
             sleep 10
             docker compose -f docker-compose.prod.yml up -d sales-outreach n8n
 
-            # 启动 nginx（HTTP 模式，等待 SSL 脚本处理）
+            # Start nginx (HTTP mode, wait for SSL script)
             docker compose -f docker-compose.prod.yml up -d nginx certbot
 
-            # 清理旧镜像
+            # Clean up old images
             docker image prune -f
 
       - name: Setup domain & SSL
@@ -116,7 +116,7 @@ jobs:
           script: |
             cd /opt/lead-mining-system
 
-            # workflow_dispatch 可传入自定义域名，默认使用 myskillstore.run
+            # workflow_dispatch can pass a custom domain, defaults to myskillstore.run
             CUSTOM_DOMAIN="${{ github.event.inputs.domain }}"
             TARGET_DOMAIN="${CUSTOM_DOMAIN:-myskillstore.run}"
             bash scripts/setup-ssl.sh "$TARGET_DOMAIN"
@@ -129,6 +129,6 @@ jobs:
           key:      ${{ secrets.VM_SSH_KEY }}
           script: |
             cd /opt/lead-mining-system
-            # 等待 n8n 就绪后导入工作流
+            # Wait for n8n to be ready then import workflows
             sleep 20
             bash import_n8n_workflows.sh || true

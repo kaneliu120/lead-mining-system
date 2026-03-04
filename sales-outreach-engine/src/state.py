@@ -1,5 +1,5 @@
 """
-LangGraph State — 外展工作流的共享状态定义
+LangGraph State — Shared state definition for the outreach workflow
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import operator
 
 
 class LeadData(TypedDict):
-    """从 PostgreSQL 加载的富化线索结构"""
+    """Structure of enriched leads loaded from PostgreSQL"""
     id:                 int
     business_name:      str
     industry_keyword:   str
@@ -19,7 +19,7 @@ class LeadData(TypedDict):
     email:              Optional[str]
     rating:             Optional[float]
     gmaps_url:          Optional[str]
-    # AI 富化字段
+    # AI enrichment fields
     industry_category:  Optional[str]
     business_size:      Optional[str]
     score:              int
@@ -37,31 +37,31 @@ class EmailDraft(TypedDict):
 
 
 class OutreachState(TypedDict):
-    """单条线索的完整外展工作流状态"""
-    # ── 输入 ──────────────────────────────────────────────────────────────────
+    """Complete outreach workflow state for a single lead"""
+    # ── Input ─────────────────────────────────────────────────────────────────
     lead:               LeadData
-    language:           str           # 'en' | 'fil' | 'mixed' (默认 'mixed')
+    language:           str           # 'en' | 'fil' | 'mixed' (default 'mixed')
 
-    # ── RAG 检索结果 ──────────────────────────────────────────────────────────
+    # ── RAG retrieval results ─────────────────────────────────────────────────
     rag_context:        Optional[str]
 
-    # ── 联系人（Apollo 查询） ───────────────────────────────────────────────────
+    # ── Contacts (Apollo query) ───────────────────────────────────────────────
     contacts:           List[Dict[str, Any]]
 
-    # ── 邮件草稿 ──────────────────────────────────────────────────────────────
+    # ── Email draft ───────────────────────────────────────────────────────────
     email_draft:        Optional[EmailDraft]
 
-    # ── 执行结果 ──────────────────────────────────────────────────────────────
-    send_result:        Optional[Dict[str, Any]]     # SMTP 发送结果
-    error:              Optional[str]                # 节点异常信息
-    skipped:            bool                         # 是否因条件不满足而跳过
+    # ── Execution results ─────────────────────────────────────────────────────
+    send_result:        Optional[Dict[str, Any]]     # SMTP send result
+    error:              Optional[str]                # Node exception info
+    skipped:            bool                         # Whether skipped due to unmet conditions
 
-    # ── 流程追踪 ─────────────────────────────────────────────────────────────
-    messages:           Annotated[List[str], operator.add]  # 执行日志
+    # ── Process tracking ──────────────────────────────────────────────────────
+    messages:           Annotated[List[str], operator.add]  # Execution log
 
 
 class BatchOutreachState(TypedDict):
-    """批量外展任务的顶层状态"""
+    """Top-level state for batch outreach tasks"""
     leads:              List[LeadData]
     completed:          Annotated[List[OutreachState], operator.add]
     total:              int

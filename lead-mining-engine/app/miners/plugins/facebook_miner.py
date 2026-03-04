@@ -1,17 +1,17 @@
 """
-FacebookMiner — Phase 3 Facebook 商业页面数据采集插件
-使用 Facebook Graph API v22.0 搜索菲律宾 SME 商家信息
+FacebookMiner — Phase 3 Facebook Business Page Data Mining Plugin
+Uses Facebook Graph API v22.0 to search for Philippines SME business information
 
-数据质量说明：
-  - 覆盖 Facebook Business Page 注册企业
-  - 含 phone、website、email（如公开设置）
-  - 需要 Facebook App + 用户访问令牌
+Data Quality Notes:
+  - Covers businesses registered as Facebook Business Pages
+  - Includes phone, website, email (if publicly set)
+  - Requires a Facebook App + user access token
 
-前置条件：
-  1. 在 https://developers.facebook.com 创建 App（类型：Business）
-  2. 开启权限：pages_read_engagement、pages_search_engagement（企业认证后）
-  3. 生成用户长期令牌（Long-lived User Access Token）
-  4. 设置 FACEBOOK_ACCESS_TOKEN 环境变量
+Prerequisites:
+  1. Create an App at https://developers.facebook.com (type: Business)
+  2. Enable permissions: pages_read_engagement, pages_search_engagement (after business verification)
+  3. Generate a long-lived User Access Token
+  4. Set the FACEBOOK_ACCESS_TOKEN environment variable
 """
 from __future__ import annotations
 
@@ -23,20 +23,20 @@ from app.miners.api_miner import APIBasedMiner
 from app.miners.base import MinerConfig, MinerHealth
 from app.models.lead import LeadRaw, LeadSource
 
-# Metro Manila 中心坐标（Mandaluyong）
+# Metro Manila center coordinates (Mandaluyong)
 _DEFAULT_LAT = 14.5794
 _DEFAULT_LNG = 121.0359
-_DEFAULT_RADIUS_M = 30000        # 30 公里覆盖大马尼拉
+_DEFAULT_RADIUS_M = 30000        # 30 km covers Metro Manila
 
 
 @dataclass
 class FacebookConfig(MinerConfig):
-    api_key: str = ""             # access_token 存在 api_key 字段
+    api_key: str = ""             # access_token stored in api_key field
     api_version: str = "v22.0"
     radius_meters: int = _DEFAULT_RADIUS_M
-    rate_limit_per_minute: int = 30     # Graph API 较宽松限速
+    rate_limit_per_minute: int = 30     # Graph API has a relatively relaxed rate limit
     timeout_seconds: int = 20
-    # 每页最多返回条数（Graph API 限制 100）
+    # Max results per page (Graph API limit: 100)
     page_limit: int = 50
 
     @property
@@ -46,22 +46,22 @@ class FacebookConfig(MinerConfig):
 
 class FacebookMiner(APIBasedMiner):
     """
-    Facebook Graph API v22.0 商业地点搜索插件。
+    Facebook Graph API v22.0 business location search plugin.
     
-    调用端点：GET /search
-      type=place       — 搜索实体地点（商家、机构）
-      q=<keyword>      — 关键词
-      center=lat,lng   — 搜索中心坐标
-      distance=<m>     — 搜索半径
-      fields=...       — 所需字段列表
+    Endpoint: GET /search
+      type=place       — search physical places (businesses, institutions)
+      q=<keyword>      — keyword
+      center=lat,lng   — search center coordinates
+      distance=<m>     — search radius
+      fields=...       — list of requested fields
     
-    免费额度：200 requests/hour（用户令牌）
-    成本：$0（公开搜 API 免费，Business 认证后可提高限速）
+    Free quota: 200 requests/hour (user token)
+    Cost: $0 (public search API is free; rate limit can be increased after Business verification)
     """
 
     GRAPH_BASE = "https://graph.facebook.com"
 
-    # 请求的字段列表（尽量多拿信息）
+    # Requested fields list (get as much info as possible)
     _FIELDS = (
         "id,name,location,phone,website,emails,"
         "category_list,fan_count,overall_star_rating,rating_count"
@@ -87,11 +87,11 @@ class FacebookMiner(APIBasedMiner):
         lng: Optional[float] = None,
         limit: int = 100,
     ) -> AsyncIterator[LeadRaw]:
-        """搜索 Facebook 上与关键词匹配的菲律宾企业页面。"""
+        """Search Facebook for Philippines business pages matching the keyword."""
         center_lat = lat or _DEFAULT_LAT
         center_lng = lng or _DEFAULT_LNG
         collected = 0
-        after_cursor: Optional[str] = None      # 分页 cursor
+        after_cursor: Optional[str] = None      # Pagination cursor
 
         while collected < limit:
             params = {
@@ -117,7 +117,7 @@ class FacebookMiner(APIBasedMiner):
                 self.logger.error(f"Facebook search failed: {exc}")
                 break
 
-            # 错误处理（令牌过期、权限不足等）
+            # Error handling (token expired, insufficient permissions, etc.)
             if "error" in data:
                 err = data["error"]
                 self.logger.error(
@@ -138,7 +138,7 @@ class FacebookMiner(APIBasedMiner):
                 cats = place.get("category_list") or []
                 cat_names = ", ".join(c.get("name", "") for c in cats)
 
-                # 拼装地址
+                # Assemble address
                 address_parts = filter(None, [
                     loc.get("street", ""),
                     loc.get("city", ""),
@@ -156,7 +156,7 @@ class FacebookMiner(APIBasedMiner):
                     email=emails[0] if emails else "",
                     website=place.get("website", ""),
                     rating=float(place.get("overall_star_rating", 0)) or None,
-                    review_count=place.get("rating_count"),  # 保留 None 语义（无评价数据 vs 0条评价）
+                    review_count=place.get("rating_count"),  # Preserve None semantics (no rating data vs. 0 ratings)
                     metadata={
                         "facebook_id":    place.get("id", ""),
                         "category":       cat_names,
@@ -168,7 +168,7 @@ class FacebookMiner(APIBasedMiner):
                 )
                 collected += 1
 
-            # 分页 cursor
+            # Pagination cursor
             paging = data.get("paging", {})
             cursors = paging.get("cursors", {})
             after_cursor = cursors.get("after")
@@ -179,7 +179,7 @@ class FacebookMiner(APIBasedMiner):
         return bool(self._cfg.access_token)
 
     async def health_check(self) -> MinerHealth:
-        """尝试调用 /me 端点验证令牌有效性。"""
+        """Attempt to call /me endpoint to verify token validity."""
         if not self._cfg.access_token:
             return MinerHealth(
                 healthy=False,

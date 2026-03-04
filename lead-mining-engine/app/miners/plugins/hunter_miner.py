@@ -1,10 +1,10 @@
 """
-HunterMiner — 联系人富化插件（替代 Apollo.io）
-Hunter.io 免费层: 25 次 domain-search/月，无需信用卡注册
-注册地址: https://hunter.io
-API 文档: https://hunter.io/api-documentation
+HunterMiner — Contact Enrichment Plugin (Apollo.io replacement)
+Hunter.io free tier: 25 domain-search/month, no credit card registration required
+Registration: https://hunter.io
+API documentation: https://hunter.io/api-documentation
 
-功能对应关系：
+Feature mapping:
   Apollo.io enrich_contacts()  →  Hunter.io /v2/domain-search
   Apollo.io people search      →  Hunter.io /v2/email-finder
 """
@@ -23,22 +23,22 @@ from app.models.lead import ContactLead, LeadRaw, LeadSource
 @dataclass
 class HunterConfig(MinerConfig):
     api_key: str = ""
-    # 免费层：25 次 domain-search/月
-    # 基础付费 $34/月 = 500次，适合菲律宾 SME 规模
+    # Free tier: 25 domain-search/month
+    # Basic paid $34/month = 500 calls, suitable for Philippines SME scale
 
 
 class HunterMiner(APIBasedMiner):
     """
-    Hunter.io 联系人富化插件。
+    Hunter.io contact enrichment plugin.
 
-    mine() 逻辑：
-      - 若 keyword 形如域名（含"."且无空格），则直接对该域名做 domain-search，
-        返回该公司所有已知邮箱及对应联系人 → LeadRaw。
-      - 否则不 yield（公司发现由 SerperMiner 负责）。
+    mine() logic:
+      - If keyword is in domain format (contains "." and no spaces), directly perform domain-search on that domain,
+        return all known emails and corresponding contacts for that company → LeadRaw.
+      - Otherwise do not yield (company discovery is handled by SerperMiner).
 
-    enrich_contacts() 逻辑：
-      - 对已发现的公司域名调用 /v2/domain-search，
-        返回决策者邮箱列表 → List[ContactLead]。
+    enrich_contacts() logic:
+      - Call /v2/domain-search on discovered company domains,
+        return decision-maker email list → List[ContactLead].
     """
 
     def __init__(self, config: HunterConfig):
@@ -62,20 +62,20 @@ class HunterMiner(APIBasedMiner):
         limit: int = 100,
     ) -> AsyncIterator[LeadRaw]:
         """
-        若 keyword 是域名格式（如 "example.com"），用 Hunter domain-search 发现联系人。
-        否则静默跳过，由 SerperMiner 执行关键词发现。
+        If keyword is in domain format (e.g. "example.com"), use Hunter domain-search to discover contacts.
+        Otherwise silently skip, let SerperMiner handle keyword discovery.
         """
-        # 只处理域名类型的关键词
+        # Only process domain-type keywords
         if "." not in keyword or " " in keyword:
-            return  # 交给 Serper 处理普通关键词
+            return  # Hand off to Serper to process regular keywords
 
-        # 使用 urlparse 正确提取域名（lstrip 是逐字符剔除，会误删 h/t/p/s 开头的字符）
+        # Use urlparse to correctly extract domain (lstrip removes characters one by one, which can incorrectly remove characters like h/t/p/s at the start)
         kw = keyword.strip()
         parsed = urlparse(kw if kw.startswith("http") else f"https://{kw}")
         domain = parsed.netloc or parsed.path.split("/")[0]
         collected = 0
         offset = 0
-        per_page = min(10, limit)   # Hunter 每页最多 100，但节省配额用小批次
+        per_page = min(10, limit)   # Hunter max 100 per page, but use small batches to save quota
 
         while collected < limit:
             response = await self._request_with_retry(
@@ -93,11 +93,11 @@ class HunterMiner(APIBasedMiner):
             if not emails:
                 break
 
-            # 使用第一条邮箱作为公司代表联系人
+            # Use first email as company representative contact
             org_name = data.get("organization", "") or domain
             phone = data.get("phone_number", "") or ""
 
-            # 合并为一个公司级 LeadRaw（附 emails 元数据）
+            # Merge into one company-level LeadRaw (with emails metadata)
             yield LeadRaw(
                 source=LeadSource.HUNTER,
                 business_name=org_name,
@@ -124,8 +124,8 @@ class HunterMiner(APIBasedMiner):
                     "description":   data.get("description", ""),
                 },
             )
-            collected += 1  # Hunter domain-search 一个域名算一条 lead
-            break           # 每个域名只取一条 LeadRaw
+            collected += 1  # Hunter domain-search counts one domain as one lead
+            break           # Only retrieve one LeadRaw per domain
 
     # ── enrich_contacts() ────────────────────────────────────────────────────
     async def enrich_contacts(
@@ -134,8 +134,8 @@ class HunterMiner(APIBasedMiner):
         limit: int = 5,
     ) -> List[ContactLead]:
         """
-        根据企业域名查找决策者邮箱。
-        调用 Hunter.io GET /v2/domain-search。
+        Find decision-maker emails based on company domain.
+        Calls Hunter.io GET /v2/domain-search.
         """
         response = await self._request_with_retry(
             "GET",
@@ -144,7 +144,7 @@ class HunterMiner(APIBasedMiner):
                 "domain":  domain,
                 "api_key": self.api_key,
                 "limit":   min(limit, 10),
-                # Hunter 支持按职位过滤（逗号分隔）
+                # Hunter supports filtering by job title (comma-separated)
                 "seniority": "senior,executive,director",
                 "department": "executive,management",
             },
@@ -182,7 +182,7 @@ class HunterMiner(APIBasedMiner):
         return bool(self.api_key)
 
     async def health_check(self) -> MinerHealth:
-        """通过 /v2/account 检测 API Key 有效性和剩余配额。"""
+        """Check API Key validity and remaining quota via /v2/account."""
         try:
             start = time.monotonic()
             resp = await self._request_with_retry(

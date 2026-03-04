@@ -1,5 +1,5 @@
 """
-LangGraph Graph — 外展流程图构建
+LangGraph Graph — Outreach workflow graph construction
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from src.nodes import (
 
 def build_graph() -> StateGraph:
     """
-    构建外展工作流图：
+    Build the outreach workflow graph:
     
     start → rag_retrieve ──→ find_contacts ──→ generate_email
                                                       │
@@ -34,21 +34,21 @@ def build_graph() -> StateGraph:
     """
     workflow = StateGraph(OutreachState)
 
-    # ── 添加节点 ──
+    # ── Add nodes ──
     workflow.add_node("rag_retrieve",   retrieve_rag_context)
     workflow.add_node("find_contacts",  find_contacts)
     workflow.add_node("generate_email", generate_email)
     workflow.add_node("send_email",     send_email)
     workflow.add_node("log_outreach",   log_outreach)
 
-    # ── 入口 ──
+    # ── Entry point ──
     workflow.set_entry_point("rag_retrieve")
 
-    # ── 顺序边 ──
+    # ── Sequential edges ──
     workflow.add_edge("rag_retrieve",  "find_contacts")
     workflow.add_edge("find_contacts", "generate_email")
 
-    # ── 条件分支 ──
+    # ── Conditional branch ──
     workflow.add_conditional_edges(
         "generate_email",
         should_send,
@@ -58,14 +58,14 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # ── 发送后记录日志 ──
+    # ── Log after sending ──
     workflow.add_edge("send_email", "log_outreach")
     workflow.add_edge("log_outreach", END)
 
     return workflow.compile()
 
 
-# 单例图实例（避免重复编译）
+# Singleton graph instance (avoid repeated compilation)
 _graph = None
 
 

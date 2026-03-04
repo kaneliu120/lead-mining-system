@@ -1,6 +1,6 @@
 """
-OutreachState 节点单元测试
-使用 mock 隔离外部依赖（DB、Gemini、SMTP）
+OutreachState node unit tests
+Using mocks to isolate external dependencies (DB, Gemini, SMTP)
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.state import OutreachState, LeadData
 from src.nodes import should_send
 
 
-# ── 测试辅助 ──────────────────────────────────────────────────────────────────
+# ── Test helpers ──────────────────────────────────────────────────────────────
 
 def make_state(
     score: int = 80,
@@ -51,12 +51,12 @@ def make_state(
     )
 
 
-# ── should_send 路由逻辑 ──────────────────────────────────────────────────────
+# ── should_send routing logic ─────────────────────────────────────────────────
 
 def test_should_send_returns_send_when_contact_found():
-    """生成了 email_draft 且无错误时应路由至 send"""
+    """Should route to send when email_draft is generated without errors"""
     state = make_state(contacts=[{"email": "mgr@biz.ph", "first_name": "Maria"}])
-    # 设置 email_draft，模拟生成成功的情况
+    # Set email_draft, simulating successful generation
     state["email_draft"] = {
         "subject": "Hi Maria!",
         "body": "We'd like to help your business...",
@@ -68,31 +68,31 @@ def test_should_send_returns_send_when_contact_found():
 
 
 def test_should_send_returns_skip_when_no_contacts():
-    """无 email_draft（常因无联系人而未生成）应路由至 end"""
+    """Should route to end when no email_draft (often because no contact found)"""
     state = make_state(contacts=[])
-    # email_draft 为 None（make_state 默认）
+    # email_draft is None (make_state default)
     result = should_send(state)
     assert result == "end"
 
 
 def test_should_send_returns_skip_when_error():
-    """发生错误时应路由至 end"""
+    """Should route to end when an error occurs"""
     state = make_state(contacts=[{"email": "a@b.com"}], error="Gemini timeout")
     result = should_send(state)
     assert result == "end"
 
 
 def test_should_send_returns_skip_when_already_skipped():
-    """已标记 skipped 时应路由至 end"""
+    """Should route to end when marked as skipped"""
     state = make_state(contacts=[{"email": "a@b.com"}], skipped=True)
     result = should_send(state)
     assert result == "end"
 
 
-# ── OutreachState 结构 ───────────────────────────────────────────────────────
+# ── OutreachState structure ───────────────────────────────────────────────────
 
 def test_state_messages_are_appendable():
-    """messages 字段应支持 operator.add 累积"""
+    """messages field should support operator.add accumulation"""
     import operator
     s1 = make_state()
     s1["messages"] = ["step 1"]
@@ -103,7 +103,7 @@ def test_state_messages_are_appendable():
 
 
 def test_state_lead_data_fields():
-    """LeadData 应包含所有必要字段"""
+    """LeadData should contain all required fields"""
     state = make_state(score=95)
     lead = state["lead"]
     assert lead["score"] == 95
@@ -112,23 +112,23 @@ def test_state_lead_data_fields():
     assert len(lead["pain_points"]) > 0
 
 
-# ── close_db_pool 关闭逻辑（Bug 修复验证）───────────────────────────────────
+# ── close_db_pool close logic (bug fix verification) ─────────────────────────
 
 @pytest.mark.asyncio
 async def test_close_db_pool_idempotent():
-    """多次调用 close_db_pool 不应抛异常（幂等）"""
+    """Multiple calls to close_db_pool should not raise exceptions (idempotent)"""
     from src.nodes import close_db_pool
-    # 确保调用时 pool 未初始化的情况下也安全
+    # Ensure safe when pool is not initialized
     await close_db_pool()
-    await close_db_pool()  # 二次调用应安全
+    await close_db_pool()  # Second call should also be safe
 
 
 @pytest.mark.asyncio
 async def test_close_db_pool_closes_real_pool():
-    """初始化 pool 后调用 close_db_pool 应正确关闭"""
+    """After pool initialization, calling close_db_pool should properly close it"""
     import src.nodes as nodes_module
 
-    # 用 mock pool 替换全局 _db_pool
+    # Replace global _db_pool with mock pool
     mock_pool = AsyncMock()
     mock_pool.close = AsyncMock()
     nodes_module._db_pool = mock_pool

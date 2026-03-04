@@ -1,5 +1,5 @@
 """
-BaseMiner — 所有数据源插件的抽象基类
+BaseMiner — abstract base class for all data source plugins
 """
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from app.models.lead import LeadRaw, LeadSource
 
 @dataclass
 class MinerConfig:
-    """插件通用配置"""
+    """Common plugin configuration"""
     enabled: bool = True
-    priority: int = 50                      # 0 = 最高优先级，100 = 最低
+    priority: int = 50                      # 0 = highest priority, 100 = lowest
     rate_limit_per_minute: int = 60
     max_retries: int = 3
     timeout_seconds: int = 30
@@ -24,7 +24,7 @@ class MinerConfig:
 
 @dataclass
 class MinerHealth:
-    """插件健康状态"""
+    """Plugin health status"""
     healthy: bool
     message: str
     latency_ms: Optional[float] = None
@@ -33,25 +33,25 @@ class MinerHealth:
 
 class BaseMiner(ABC):
     """
-    所有数据源插件的抽象基类。
+    Abstract base class for all data source plugins.
 
-    每个插件必须实现:
-      - source_name  : 返回 LeadSource 枚举值
-      - mine()       : 异步生成器，yield LeadRaw
-      - validate_config(): 验证 API Key 等配置
-      - health_check(): 返回 MinerHealth
+    Each plugin must implement:
+      - source_name  : return LeadSource enum value
+      - mine()       : async generator, yield LeadRaw
+      - validate_config(): validate API Key and other config
+      - health_check(): return MinerHealth
     """
 
     def __init__(self, config: MinerConfig):
         self.config = config
         self.logger = logging.getLogger(f"miner.{self.__class__.__name__}")
 
-    # ── 必须实现 ──────────────────────────────────────────────────────────────
+    # ── Must implement ───────────────────────────────────────────────────────
 
     @property
     @abstractmethod
     def source_name(self) -> LeadSource:
-        """返回数据源标识枚举值"""
+        """Return the data source identifier enum value"""
         ...
 
     @abstractmethod
@@ -64,41 +64,41 @@ class BaseMiner(ABC):
         limit: int = 100,
     ) -> AsyncIterator[LeadRaw]:
         """
-        执行数据采集。
+        Execute data mining.
 
         Args:
-            keyword:  行业/搜索关键词（如 "restaurant"、"salon"）
-            location: 地点文字（如 "Makati, Metro Manila"）
-            lat/lng:  可选坐标（部分 API 需要）
-            limit:    最大返回条数
+            keyword:  industry/search keyword (e.g. "restaurant", "salon")
+            location: location text (e.g. "Makati, Metro Manila")
+            lat/lng:  optional coordinates (required by some APIs)
+            limit:    maximum number of results to return
 
         Yields:
-            LeadRaw 对象（统一输出格式）
+            LeadRaw objects (unified output format)
         """
         ...
 
     @abstractmethod
     async def validate_config(self) -> bool:
         """
-        验证插件配置是否有效（API Key 存在且格式正确等）。
-        启动时调用，失败则跳过此插件。
+        Validate that the plugin configuration is valid (API Key exists and is correctly formatted, etc.).
+        Called at startup; if it fails, this plugin is skipped.
         """
         ...
 
     @abstractmethod
     async def health_check(self) -> MinerHealth:
         """
-        运行时健康检查，返回延迟、可用配额等。
-        由 Orchestrator 按需调用，决定是否启用 fallback。
+        Runtime health check, returns latency, available quota, etc.
+        Called by the Orchestrator on demand to decide whether to enable fallback.
         """
         ...
 
-    # ── 可选覆写（生命周期钩子）──────────────────────────────────────────────
+    # ── Optional overrides (lifecycle hooks) ─────────────────────────────────
 
     async def on_startup(self) -> None:
-        """插件启动钩子，用于初始化 HTTP 客户端、浏览器等资源"""
+        """Plugin startup hook, used to initialize HTTP clients, browsers, and other resources"""
         pass
 
     async def on_shutdown(self) -> None:
-        """插件关闭钩子，用于释放连接池等资源"""
+        """Plugin shutdown hook, used to release connection pools and other resources"""
         pass

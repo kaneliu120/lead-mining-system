@@ -1,6 +1,6 @@
 """
-FastAPI 服务层 — Lead Mining Engine 对外接口
-提供 /mine, /health, /leads, /rag/query, /export 端点
+FastAPI service layer — Lead Mining Engine external interface
+Provides /mine, /health, /leads, /rag/query, /export endpoints
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from app.writers.csv_writer import CsvWriter
 
 logger = logging.getLogger(__name__)
 
-# ── 应用状态容器 ─────────────────────────────────────────────────────────────
+# ── Application state container ──────────────────────────────────────────
 class AppState:
     orchestrator: MiningOrchestrator
     pg: PostgresWriter
@@ -83,36 +83,36 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# P2-6：速率限制中间件（令牌桶，防止单 IP 滥用）
+# P2-6: Rate limiting middleware (token bucket, prevent single-IP abuse)
 app.add_middleware(RateLimitMiddleware, enabled=True)
-# CSRF 防护中间件（Origin/Referer 验证，防止跨站请求伪造）
+# CSRF protection middleware (Origin/Referer validation, prevent CSRF)
 app.add_middleware(CSRFMiddleware, enabled=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 管理员认证 — 基于 HMAC 签名 Cookie
-# 设置环境变量 ADMIN_PASSWORD 修改登录密码（必填，无默认值）
-# 设置环境变量 ADMIN_SECRET 修改签名密钥（必填，无默认值）
+# Admin auth — HMAC-signed cookie
+# Set ADMIN_PASSWORD env var to change login password (required, no default)
+# Set ADMIN_SECRET env var to change signing key (required, no default)
 # ══════════════════════════════════════════════════════════════════════════════
 _ADMIN_SECRET   = os.environ.get("ADMIN_SECRET",   "")
 _ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 if not _ADMIN_SECRET:
-    raise RuntimeError("ADMIN_SECRET 环境变量未设置，拒绝启动")
+    raise RuntimeError("ADMIN_SECRET env var not set — startup refused")
 if not _ADMIN_PASSWORD:
-    raise RuntimeError("ADMIN_PASSWORD 环境变量未设置，拒绝启动")
+    raise RuntimeError("ADMIN_PASSWORD env var not set — startup refused")
 _SESSION_COOKIE   = "admin_session"
-_SESSION_TTL      = 86400  # 24 小时
+_SESSION_TTL      = 86400  # 24 hours
 
 
 def _make_session_token() -> str:
-    """生成带时间戳的 HMAC 签名 session token"""
+    """Generate a timestamped HMAC-signed session token"""
     ts  = str(int(time.time()))
     sig = hmac.new(_ADMIN_SECRET.encode(), ts.encode(), hashlib.sha256).hexdigest()
     return f"{ts}.{sig}"
 
 
 def _verify_session(token: str | None) -> bool:
-    """校验 session token 的签名和有效期"""
+    """Verify session token signature and expiry"""
     if not token:
         return False
     try:
@@ -162,7 +162,7 @@ input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2
 <div class="card">
   <div class="lang-row">
     <button class="lang-btn active" id="login-btn-en" onclick="loginSetLang('en')">EN</button>
-    <button class="lang-btn" id="login-btn-zh" onclick="loginSetLang('zh')">中文</button>
+    <button class="lang-btn" id="login-btn-zh" onclick="loginSetLang('zh')">Chinese</button>
   </div>
   <div class="logo">&#9889; Lead Mining</div>
   <div class="sub" id="login-sub">Console Login</div>
@@ -174,7 +174,7 @@ input[type=password]:focus{{outline:none;border-color:#38bdf8;box-shadow:0 0 0 2
   </form>
 </div>
 <script>
-const _LL={{en:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',errWrong:'Incorrect password, please try again'}},zh:{{sub:'控制台登录',pwLabel:'管理员密码',pwPlaceholder:'请输入密码\u2026',submit:'登录',errWrong:'密码错误，请重试'}}}};
+const _LL={{en:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',errWrong:'Incorrect password, please try again'}},zh:{{sub:'Console Login',pwLabel:'Admin Password',pwPlaceholder:'Enter password\u2026',submit:'Log In',errWrong:'Incorrect password, please try again'}}}};
 let _loginLang=localStorage.getItem('lang')||'en';
 function loginSetLang(l){{_loginLang=l;localStorage.setItem('lang',l);const d=_LL[l]||_LL.en;document.getElementById('login-sub').textContent=d.sub;document.getElementById('pw-label').textContent=d.pwLabel;document.getElementById('pw-input').placeholder=d.pwPlaceholder;document.getElementById('btn-submit').textContent=d.submit;document.getElementById('login-btn-en').classList.toggle('active',l==='en');document.getElementById('login-btn-zh').classList.toggle('active',l==='zh');const errEl=document.getElementById('loginErr');if(errEl&&errEl.dataset.show)errEl.textContent=d.errWrong;}}
 loginSetLang(_loginLang);
@@ -183,14 +183,14 @@ loginSetLang(_loginLang);
 
 
 
-# ── Request / Response 模型 ────────────────────────────────────────────────────
+# ── Request / Response models ─────────────────────────────────────────────────
 class MineRequest(BaseModel):
     keyword:  str    = Field(..., example="restaurant")
     location: str    = Field("Philippines", example="Manila, Philippines")
     limit:    int    = Field(100, ge=1, le=500)
     sources:  Optional[List[str]] = None
-    enrich:   bool   = Field(False, description="是否立即触发 Gemini 富化")
-    min_score: int   = Field(0, ge=0, le=100, description="富化后过滤分数")
+    enrich:   bool   = Field(False, description="Whether to immediately trigger Gemini enrichment")
+    min_score: int   = Field(0, ge=0, le=100, description="Filter score after enrichment")
 
 
 class MineResponse(BaseModel):
@@ -209,15 +209,15 @@ class RagQueryRequest(BaseModel):
     where:   Optional[Dict[str, Any]] = None
 
 
-# ── 路由 ──────────────────────────────────────────────────────────────────────
+# ── Routes ─────────────────────────────────────────────────────────────────────
 @app.post("/mine", response_model=MineResponse, tags=["Mining"])
 async def mine(req: MineRequest, background_tasks: BackgroundTasks):
     """
-    触发一次采集任务。
-    - 并发调用所有已启用 Miner
-    - 自动去重
-    - 写入 PostgreSQL + ChromaDB
-    - 可选立即富化（同步）
+    Trigger a single mining task.
+    - Concurrently calls all enabled Miners
+    - Auto-deduplicate
+    - Write to PostgreSQL + ChromaDB
+    - Optional immediate enrichment (synchronous)
     """
     task = MiningTask(
         keyword=req.keyword,
@@ -227,15 +227,15 @@ async def mine(req: MineRequest, background_tasks: BackgroundTasks):
     )
     result = await state.orchestrator.run_task(task)
 
-    # 写入 PostgreSQL
+    # Write to PostgreSQL
     if result.leads:
         inserted, skipped = await state.pg.upsert_leads(result.leads)
         logger.info(f"/mine: pg upsert {inserted} new, {skipped} skipped")
 
-    # 写入 ChromaDB（背景任务，非阻塞）
+    # Write to ChromaDB (background task, non-blocking)
     background_tasks.add_task(state.chroma.upsert_leads, result.leads)
 
-    # 可选富化
+    # Optional enrichment
     enriched_leads = []
     if req.enrich and state.enricher and result.leads:
         enriched_leads = await state.enricher.enrich_batch(
@@ -262,11 +262,11 @@ async def list_leads(
     keyword:    Optional[str] = Query(None),
     min_score:  int           = Query(0, ge=0, le=100),
     source:     Optional[str] = Query(None),
-    lead_id:    Optional[int] = Query(None, description="按 ID 精确查询单条线索"),
+    lead_id:    Optional[int] = Query(None, description="Exact lookup of a single lead by ID"),
     limit:      int           = Query(50, ge=1, le=200),
     offset:     int           = Query(0, ge=0),
 ):
-    """查询已存储的线索（支持 id / keyword / source / min_score 过滤）"""
+    """Query stored leads (supports id / keyword / source / min_score filtering)"""
     rows = await state.pg.query_leads(
         industry_keyword=keyword,
         min_score=min_score,
@@ -279,17 +279,17 @@ async def list_leads(
 
 
 class EnrichRequest(BaseModel):
-    limit:            int           = Field(50, ge=1, le=200, description="最多处理多少条未富化线索")
-    min_score:        int           = Field(0, ge=0, le=100, description="富化后保留的最低评分")
+    limit:            int           = Field(50, ge=1, le=200, description="Maximum number of un-enriched leads to process")
+    min_score:        int           = Field(0, ge=0, le=100, description="Minimum score to keep after enrichment")
     industry_keyword: Optional[str] = None
 
 
 @app.post("/enrich", tags=["Enrichment"])
 async def enrich_leads(req: EnrichRequest, background_tasks: BackgroundTasks):
     """
-    对数据库中尚未 AI 富化的线索批量调用 Gemini 富化。
-    - 不重新采集，不消耗 Serper/Apollo 配额
-    - 供 n8n 工作流 02 定期调用
+    Batch-enrich leads in the database that have not yet been AI-enriched.
+    - No re-mining, does not consume Serper/Apollo quota
+    - Called periodically by n8n workflow 02
     """
     if not state.enricher:
         raise HTTPException(status_code=503, detail="GeminiEnricher not configured (GEMINI_API_KEY missing)")
@@ -330,8 +330,8 @@ class UpdateStatusRequest(BaseModel):
 @app.post("/leads/update-status", tags=["Leads"])
 async def update_lead_status(req: UpdateStatusRequest):
     """
-    更新 outreach_log 中某邮箱地址的回复状态。
-    供 n8n 回复检测工作流（04）调用。
+    Update the reply status of an email address in outreach_log.
+    Called by n8n reply-detection workflow (04).
     """
     affected = await state.pg.update_outreach_status(
         email=req.email,
@@ -343,9 +343,8 @@ async def update_lead_status(req: UpdateStatusRequest):
 @app.post("/rag/query", tags=["RAG"])
 async def rag_query(req: RagQueryRequest):
     """
-    语义相似度查询（供 sales-outreach LangGraph 使用）。
-    基于 ChromaDB 向量搜索，返回最相关的线索文档。
-    ChromaDB HTTP Client 为同步 I/O，用 asyncio.to_thread 避免阻塞事件循环。
+    Semantic vector search via ChromaDB, returns most relevant lead documents.
+    ChromaDB HTTP Client uses synchronous I/O; use asyncio.to_thread to avoid blocking the event loop.
     """
     try:
         results = await asyncio.to_thread(
@@ -367,7 +366,7 @@ async def export_leads(
     min_score:     int           = Query(50, ge=0, le=100),
     export_format: str           = Query("csv", regex="^(csv|json)$"),
 ):
-    """导出线索为 CSV 或 JSON（用于销售团队直接使用）"""
+    """Export leads as CSV or JSON (for direct use by sales team)"""
     from app.models.lead import EnrichedLead
     rows = await state.pg.query_leads(
         industry_keyword=keyword,
@@ -378,7 +377,7 @@ async def export_leads(
     if export_format == "json":
         return rows
 
-    # CSV 流式返回（UTF-8 BOM，兼容 Excel）
+    # CSV streaming response (UTF-8 BOM, Excel-compatible)
     leads = [EnrichedLead(**_row_to_enriched_kwargs(r)) for r in rows if r.get("enriched")]
     csv_content = CsvWriter.write_enriched(leads)
 
@@ -391,7 +390,7 @@ async def export_leads(
 
 @app.get("/health", tags=["System"])
 async def health():
-    """系统健康检查（含各 Miner 插件状态）"""
+    """System health check (including all Miner plugin statuses)"""
     miners_health = await state.orchestrator.health_check_all()
     chroma_count  = await asyncio.to_thread(state.chroma.count)
     return {
@@ -406,7 +405,7 @@ async def health():
 
 @app.get("/stats", tags=["System"])
 async def stats():
-    """漏斗统计：raw → enriched → outreached"""
+    """Funnel stats: raw → enriched → outreached"""
     d = await state.pg.fetch_funnel_stats()
     raw    = int(d["raw_total"] or 0)
     enr    = int(d["enriched_total"] or 0)
@@ -431,13 +430,13 @@ async def stats():
 
 @app.get("/dashboard", response_class=HTMLResponse, tags=["System"])
 async def dashboard_legacy():
-    """旧版 dashboard，重定向至新版 /admin"""    
+    """Legacy dashboard — redirect to new /admin"""    
     return RedirectResponse(url="/admin", status_code=301)
 
 
 @app.get("/_old_dashboard_html", include_in_schema=False)
 async def dashboard_html_unused():
-    """（已废弃，保留历史记录）"""  # noqa
+    """(Deprecated — kept for historical reference)"""  # noqa
     return """<!DOCTYPE html>\n<!-- UNUSED LEGACY -->
 <html lang="zh">
 <head>
@@ -471,15 +470,15 @@ async def dashboard_html_unused():
 </head>
 <body>
   <h1>&#127919; Lead Mining Dashboard</h1>
-  <p class="sub">Philippines SME &#8226; 自动刷新每60秒</p>
-  <p class="ts" id="ts">加载中…</p>
+  <p class="sub">Philippines SME &#8226; Auto-refresh every 60s</p>
+  <p class="ts" id="ts">Loading...</p>
   <div class="grid" id="cards"></div>
   <div class="charts">
-    <div class="chart-box"><h3>&#128200; 漏斗转化率</h3><canvas id="fc" height="200"></canvas></div>
-    <div class="chart-box"><h3>&#11088; Top Leads 评分</h3><canvas id="sc" height="200"></canvas></div>
+    <div class="chart-box"><h3>&#128200; Funnel Conversion</h3><canvas id="fc" height="200"></canvas></div>
+    <div class="chart-box"><h3>&#11088; Top Leads Score</h3><canvas id="sc" height="200"></canvas></div>
   </div>
   <p class="sec">&#128229; Top 15 Enriched Leads</p>
-  <table><thead><tr><th>#</th><th>公司</th><th>行业</th><th>地址</th><th>评分</th><th>状态</th></tr></thead>
+  <table><thead><tr><th>#</th><th>Company</th><th>Industry</th><th>Address</th><th>Score</th><th>Status</th></tr></thead>
   <tbody id="tb"></tbody></table>
 <script>
 async function load(){
@@ -492,14 +491,14 @@ async function load(){
   document.getElementById('cards').innerHTML=[
     {v:s.raw_total||0,l:t('cardRaw'),s2:t('cardRawSub')},
     {v:s.enriched_total||0,l:t('cardEnr'),s2:t('cardEnrPre')+(s.enrichment_rate||'0%')},
-    {v:+(s.avg_score||0).toFixed(1),l:'平均分数',s2:'满分 100'},
+    {v:+(s.avg_score||0).toFixed(1),l:'Avg Score',s2:'Out of 100'},
     {v:s.high_score_70||0,l:t('cardHigh'),s2:t('cardHighSub')},
     {v:o.emails_sent||0,l:t('cardEmails'),s2:''},
-    {v:s.raw_with_email||0,l:'含邮箱线索',s2:'可直接外展'},
+    {v:s.raw_with_email||0,l:'Leads w/ Email',s2:'Ready for outreach'},
   ].map(c=>`<div class="card"><div class="val">${c.v}</div><div class="lbl">${c.l}</div><div class="sub2">${c.s2}</div></div>`).join('');
   const fc=document.getElementById('fc');
   if(window._fc)window._fc.destroy();
-  window._fc=new Chart(fc,{type:'bar',data:{labels:['Raw','富化','70+','已外展'],
+  window._fc=new Chart(fc,{type:'bar',data:{labels:['Raw','Enriched','70+','Outreached'],
     datasets:[{data:[s.raw_total||0,s.enriched_total||0,s.high_score_70||0,o.emails_sent||0],
     backgroundColor:['#1d4ed8','#7c3aed','#059669','#d97706'],borderRadius:6,borderSkipped:false}]},
     options:{plugins:{legend:{display:false}},scales:{y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},x:{ticks:{color:'#94a3b8'}}}}});
@@ -514,17 +513,17 @@ async function load(){
     options:{indexAxis:'y',plugins:{legend:{display:false}},
     scales:{x:{max:100,grid:{color:'#0f172a'},ticks:{color:'#64748b'}},y:{ticks:{color:'#94a3b8',font:{size:10}}}}}});
   const tb=document.getElementById('tb');
-  if(!top.length){tb.innerHTML='<tr><td colspan=6 style="text-align:center;color:#475569;padding:28px">暂无富化数据</td></tr>';return;}
+  if(!top.length){tb.innerHTML='<tr><td colspan=6 style="text-align:center;color:#475569;padding:28px">No enriched data</td></tr>';return;}
   tb.innerHTML=top.map((l,i)=>{
     const cls=l.score>=70?'g':l.score>=50?'b':'r';
-    return`<tr><td>${i+1}</td><td>${l.business_name||''}</td><td>${l.industry_category||l.industry_keyword||''}</td><td style="color:#64748b;font-size:.78rem">${(l.address||'').substring(0,28)}</td><td><span class="badge ${cls}">${l.score}</span></td><td><span class="badge ${l.outreached?'g':'b'}">${l.outreached?'已外展':'待外展'}</span></td></tr>`;
+    return`<tr><td>${i+1}</td><td>${l.business_name||''}</td><td>${l.industry_category||l.industry_keyword||''}</td><td style="color:#64748b;font-size:.78rem">${(l.address||'').substring(0,28)}</td><td><span class="badge ${cls}">${l.score}</span></td><td><span class="badge ${l.outreached?'g':'b'}">${l.outreached?'Outreached':'Pending'}</span></td></tr>`;
   }).join('');
 }
 load();setInterval(load,60000);
 </script></body></html>"""
 
 
-# ── P2-5：评分反馈与模型优化 ─────────────────────────────────────────────────
+# ── P2-5: Score feedback & model calibration ──────────────────────────────────
 
 _VALID_OUTCOMES = frozenset({"replied", "converted", "bounced", "ignored", "unsubscribed"})
 
@@ -537,29 +536,29 @@ async def submit_lead_feedback(
     notes: str   = Body("", embed=True),
 ):
     """
-    P2-5：记录外展结果，用于评分模型优化。
-    - replied / converted → 正向信号（该类线索评分权重应提升）
-    - bounced / ignored   → 负向信号
-    - unsubscribed        → 需从名单移除
+    P2-5: Record outreach result for scoring model optimization.
+    - replied / converted → positive signal (score weight for this lead type should increase)
+    - bounced / ignored   → negative signal
+    - unsubscribed        → must be removed from the list
     """
     if outcome not in _VALID_OUTCOMES:
-        raise HTTPException(400, f"outcome 必须是 {sorted(_VALID_OUTCOMES)} 之一")
+        raise HTTPException(400, f"outcome must be one of {sorted(_VALID_OUTCOMES)}")
     try:
         await state.pg.insert_feedback(lead_id, outcome, notes)
     except Exception as exc:
         err_msg = str(exc)
-        # FK 约束违反 → lead_id 不存在
+        # FK constraint violation → lead_id does not exist
         if "foreign key" in err_msg.lower() or "ForeignKeyViolationError" in type(exc).__name__:
-            raise HTTPException(404, f"Lead {lead_id} 不存在")
-        raise HTTPException(500, f"写入反馈失败: {exc}")
+            raise HTTPException(404, f"Lead {lead_id} not found")
+        raise HTTPException(500, f"Failed to write feedback: {exc}")
     return {"ok": True, "lead_id": lead_id, "outcome": outcome}
 
 
 @app.get("/scoring/stats", tags=["Scoring"])
 async def scoring_stats():
     """
-    P2-5：按行业维度统计评分与转化率，用于优化最低外展分阈值。
-    返回各行业的平均分、正向回复数、转化率，帮助识别高价值行业。
+    P2-5: Statistics on score and conversion rate by industry, to optimize minimum outreach score threshold.
+    Returns avg score, positive reply count, conversion rate per industry to identify high-value segments.
     """
     summary, total_feedback = await state.pg.fetch_scoring_stats()
     return {
@@ -573,18 +572,18 @@ async def scoring_stats():
 @app.post("/scoring/recalibrate", tags=["Scoring"])
 async def scoring_recalibrate(min_positives: int = Body(3, embed=True)):
     """
-    P2-5：对评分偏低但外展正向的线索重新进行 Gemini 富化，修正评分偏差。
-    触发条件：有 >= min_positives 条正向反馈，且对应线索当前评分 < 65。
+    P2-5: Re-enrich leads with low scores but positive outreach feedback, correcting score bias.
+    Trigger condition: >= min_positives positive feedback entries and current score < 65.
     """
     if state.enricher is None:
-        raise HTTPException(503, "GeminiEnricher 未初始化，请检查 GEMINI_API_KEY")
+        raise HTTPException(503, "GeminiEnricher not initialized — check GEMINI_API_KEY")
 
-    # 找出有正向反馈但评分偏低的线索
+    # Find leads with positive feedback but low scores
     rows = await state.pg.fetch_low_score_positive_leads(min_positives=min_positives)
     if not rows:
-        return {"ok": True, "recalibrated": 0, "message": "暂无需要校正的线索"}
+        return {"ok": True, "recalibrated": 0, "message": "No leads need recalibration"}
 
-    # 将这些行转成 LeadRaw 对象并重新富化
+    # Convert rows to LeadRaw objects and re-enrich
     leads_to_recalibrate = [
         lead for r in rows
         if (lead := _row_to_lead_raw(r)) is not None
@@ -592,7 +591,7 @@ async def scoring_recalibrate(min_positives: int = Body(3, embed=True)):
     ]
 
     if not leads_to_recalibrate:
-        return {"ok": True, "recalibrated": 0, "message": "线索数据转换失败"}
+        return {"ok": True, "recalibrated": 0, "message": "Lead data conversion failed"}
 
     enriched = await state.enricher.enrich_batch(leads_to_recalibrate, skip_below_score=0)
     if enriched:
@@ -602,11 +601,11 @@ async def scoring_recalibrate(min_positives: int = Body(3, embed=True)):
         "ok":           True,
         "recalibrated": len(enriched),
         "total_found":  len(rows),
-        "message":      f"已重新对 {len(enriched)} 条线索进行 Gemini 评分校正（原均分 < 65，有正向反馈 ≥ {min_positives}）",
+        "message":      f"Re-calibrated {len(enriched)} leads with Gemini scoring (original avg score < 65, positive feedback >= {min_positives})",
     }
 
 
-# ── 辅助函数 ──────────────────────────────────────────────────────────────────
+# ── Helper functions ─────────────────────────────────────────────────────────
 def _lead_to_dict(lead) -> dict:
     try:
         return lead.model_dump(mode="json")
@@ -615,7 +614,7 @@ def _lead_to_dict(lead) -> dict:
 
 
 def _row_to_enriched_kwargs(row: dict) -> dict:
-    """把 PostgreSQL 行转为 EnrichedLead 构造参数"""
+    """Convert PostgreSQL row to EnrichedLead constructor kwargs"""
     import json as _json
     from app.models.lead import LeadSource
     return {
@@ -645,32 +644,32 @@ def _row_to_enriched_kwargs(row: dict) -> dict:
     }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 管理面板 API — /admin/*
+# Admin panel API — /admin/*
 # ══════════════════════════════════════════════════════════════════════════════
 
-# 所有可配置 API Key 的描述信息
+# Descriptors for all configurable API Keys
 _API_KEY_DEFS = [
-    {"key": "GEMINI_API_KEY",           "label": "Gemini API Key",          "hint": "AI 富化引擎，必填",           "hint_en": "AI Enrichment Engine — Required",              "url": "https://aistudio.google.com/app/apikey"},
-    {"key": "SERPER_API_KEY",           "label": "Serper API Key",          "hint": "Google 搜索代理 (Phase 1)",   "hint_en": "Google Search Proxy (Phase 1)",                 "url": "https://serper.dev"},
-    {"key": "HUNTER_API_KEY",           "label": "Hunter.io API Key",       "hint": "邮箱发现 (Phase 1)",          "hint_en": "Email Discovery (Phase 1)",                     "url": "https://hunter.io"},
-    {"key": "GOOGLE_API_KEY",           "label": "Google API Key",          "hint": "Google CSE 搜索 (Phase 2)",   "hint_en": "Google CSE Search (Phase 2)",                   "url": "https://console.cloud.google.com"},
+    {"key": "GEMINI_API_KEY",           "label": "Gemini API Key",          "hint": "AI Enrichment Engine — Required",           "hint_en": "AI Enrichment Engine — Required",              "url": "https://aistudio.google.com/app/apikey"},
+    {"key": "SERPER_API_KEY",           "label": "Serper API Key",          "hint": "Google Search Proxy (Phase 1)",   "hint_en": "Google Search Proxy (Phase 1)",                 "url": "https://serper.dev"},
+    {"key": "HUNTER_API_KEY",           "label": "Hunter.io API Key",       "hint": "Email Discovery (Phase 1)",          "hint_en": "Email Discovery (Phase 1)",                     "url": "https://hunter.io"},
+    {"key": "GOOGLE_API_KEY",           "label": "Google API Key",          "hint": "Google CSE Search (Phase 2)",   "hint_en": "Google CSE Search (Phase 2)",                   "url": "https://console.cloud.google.com"},
     {"key": "GOOGLE_CSE_CX",            "label": "Google CSE CX",           "hint": "Custom Search Engine ID",     "hint_en": "Custom Search Engine ID",                       "url": "https://programmablesearchengine.google.com"},
-    {"key": "REDDIT_CLIENT_ID",         "label": "Reddit Client ID",        "hint": "Reddit 采集 (Phase 2)",       "hint_en": "Reddit Mining (Phase 2)",                       "url": "https://www.reddit.com/prefs/apps"},
-    {"key": "REDDIT_CLIENT_SECRET",     "label": "Reddit Client Secret",    "hint": "Reddit 认证密钥",             "hint_en": "Reddit Authentication Secret",                  "url": "https://www.reddit.com/prefs/apps"},
-    {"key": "FACEBOOK_ACCESS_TOKEN",    "label": "Facebook Access Token",   "hint": "Facebook 商家搜索 (Phase 3)", "hint_en": "Facebook Business Search (Phase 3)",            "url": "https://developers.facebook.com"},
+    {"key": "REDDIT_CLIENT_ID",         "label": "Reddit Client ID",        "hint": "Reddit Mining (Phase 2)",       "hint_en": "Reddit Mining (Phase 2)",                       "url": "https://www.reddit.com/prefs/apps"},
+    {"key": "REDDIT_CLIENT_SECRET",     "label": "Reddit Client Secret",    "hint": "Reddit Authentication Secret",             "hint_en": "Reddit Authentication Secret",                  "url": "https://www.reddit.com/prefs/apps"},
+    {"key": "FACEBOOK_ACCESS_TOKEN",    "label": "Facebook Access Token",   "hint": "Facebook Business Search (Phase 3)", "hint_en": "Facebook Business Search (Phase 3)",            "url": "https://developers.facebook.com"},
 ]
 
-# Miner 展示名和相关说明
+# Miner display names and descriptions
 _MINER_DISPLAY = {
-    "serper":       {"label": "Serper",       "desc": "Google 搜索代理，菲律宾 SME 首选",     "desc_en": "Google Search Proxy — Best for Philippines SME",        "phase": 1},
-    "hunter":       {"label": "Hunter.io",    "desc": "邮箱验证与发现",                       "desc_en": "Email Verification & Discovery",                        "phase": 1},
-    "google_cse":   {"label": "Google CSE",   "desc": "Google 自定义搜索引擎",                "desc_en": "Google Custom Search Engine",                           "phase": 2},
-    "sec_ph":       {"label": "SEC PH",       "desc": "菲律宾企业注册查询（无需 Key）",       "desc_en": "Philippines SEC Company Registry (No API Key)",         "phase": 2},
-    "reddit":       {"label": "Reddit",       "desc": "Reddit 社区线索挖掘",                  "desc_en": "Reddit Community Lead Mining",                          "phase": 2},
-    "yellow_pages": {"label": "Yellow Pages", "desc": "黄页商家数据（无需 Key）",             "desc_en": "Yellow Pages Business Data (No API Key)",               "phase": 2},
-    "philgeps":     {"label": "PhilGEPS",     "desc": "政府采购公告（无需 Key）",             "desc_en": "Government Procurement Announcements (No API Key)",     "phase": 3},
-    "facebook":     {"label": "Facebook",     "desc": "Facebook 商家页面搜索",                "desc_en": "Facebook Business Page Search",                         "phase": 3},
-    "dti_bnrs":     {"label": "DTI BNRS",     "desc": "菲律宾贸工部企业注册（无需 Key）",    "desc_en": "Philippines DTI Business Registration (No API Key)",    "phase": 3},
+    "serper":       {"label": "Serper",       "desc": "Google Search Proxy — Best for Philippines SME",     "desc_en": "Google Search Proxy — Best for Philippines SME",        "phase": 1},
+    "hunter":       {"label": "Hunter.io",    "desc": "Email Verification & Discovery",                       "desc_en": "Email Verification & Discovery",                        "phase": 1},
+    "google_cse":   {"label": "Google CSE",   "desc": "Google Custom Search Engine",                "desc_en": "Google Custom Search Engine",                           "phase": 2},
+    "sec_ph":       {"label": "SEC PH",       "desc": "Philippines SEC Company Registry (No API Key)",       "desc_en": "Philippines SEC Company Registry (No API Key)",         "phase": 2},
+    "reddit":       {"label": "Reddit",       "desc": "Reddit Community Lead Mining",                  "desc_en": "Reddit Community Lead Mining",                          "phase": 2},
+    "yellow_pages": {"label": "Yellow Pages", "desc": "Yellow Pages Business Data (No API Key)",             "desc_en": "Yellow Pages Business Data (No API Key)",               "phase": 2},
+    "philgeps":     {"label": "PhilGEPS",     "desc": "Government Procurement Announcements (No API Key)",             "desc_en": "Government Procurement Announcements (No API Key)",     "phase": 3},
+    "facebook":     {"label": "Facebook",     "desc": "Facebook Business Page Search",                "desc_en": "Facebook Business Page Search",                         "phase": 3},
+    "dti_bnrs":     {"label": "DTI BNRS",     "desc": "Philippines DTI Business Registration (No API Key)",    "desc_en": "Philippines DTI Business Registration (No API Key)",    "phase": 3},
 }
 
 
@@ -686,7 +685,7 @@ class ApiKeyRequest(BaseModel):
 
 @app.get("/admin/settings", tags=["Admin"])
 async def admin_get_settings():
-    """获取所有 Miner 状态和 API Key 存在性（不返回明文 Key）"""
+    """Get all Miner statuses and API Key presence (does not return plaintext keys)"""
     db_settings = await state.pg.get_all_settings()
 
     miners_out = {}
@@ -694,7 +693,7 @@ async def admin_get_settings():
         miner = state.orchestrator._miners.get(name)
         if miner is None:
             continue
-        # 运行时状态 or DB 覆盖
+        # Runtime status or DB override
         db_enabled = db_settings.get(f"miner:{name}:enabled")
         if db_enabled is not None:
             enabled = db_enabled.lower() == "true"
@@ -734,10 +733,10 @@ async def admin_get_settings():
 
 @app.post("/admin/settings/miner-toggle", tags=["Admin"])
 async def admin_miner_toggle(req: MinerToggleRequest):
-    """运行时切换 Miner 启用状态（持久化到 DB）"""
+    """Toggle Miner enabled state at runtime (persisted to DB)"""
     miner = state.orchestrator._miners.get(req.name)
     if miner is None:
-        raise HTTPException(404, f"Miner '{req.name}' 不存在")
+        raise HTTPException(404, f"Miner '{req.name}' not found")
     miner.config.enabled = req.enabled
     await state.pg.set_setting(f"miner:{req.name}:enabled", str(req.enabled).lower())
     return {"ok": True, "name": req.name, "enabled": req.enabled}
@@ -745,19 +744,19 @@ async def admin_miner_toggle(req: MinerToggleRequest):
 
 @app.post("/admin/settings/apikey", tags=["Admin"])
 async def admin_set_apikey(req: ApiKeyRequest):
-    """更新 API Key（写入 DB + 注入当前进程 env，重启后从 DB 恢复）"""
+    """Update API Key (write to DB + inject into current process env, restored from DB after restart)"""
     allowed = {d["key"] for d in _API_KEY_DEFS}
     if req.key not in allowed:
-        raise HTTPException(400, f"不允许更新的 Key: {req.key}")
+        raise HTTPException(400, f"Key not allowed for update: {req.key}")
     if not req.value.strip():
-        raise HTTPException(400, "value 不能为空")
+        raise HTTPException(400, "value cannot be empty")
 
-    # 注入运行时 env
+    # Inject into runtime env
     os.environ[req.key] = req.value.strip()
-    # 持久化到 DB
+    # Persist to DB
     await state.pg.set_setting(f"apikey:{req.key}", req.value.strip())
 
-    # 如果是 Miner 的必要 Key，自动重新启用对应 miner
+    # If it's a required Miner Key, auto re-enable the corresponding miner
     for name, meta in FACTORY.items():
         if meta.get("env_key") == req.key:
             miner = state.orchestrator._miners.get(name)
@@ -766,7 +765,7 @@ async def admin_set_apikey(req: ApiKeyRequest):
                 miner.config.enabled = True
                 await state.pg.set_setting(f"miner:{name}:enabled", "true")
 
-    # 如果是 Gemini Key，重新初始化 enricher
+    # If it's the Gemini Key, re-initialize the enricher
     if req.key == "GEMINI_API_KEY" and state.enricher is None:
         try:
             state.enricher = build_gemini_enricher()
@@ -780,8 +779,8 @@ async def admin_set_apikey(req: ApiKeyRequest):
 
 @app.on_event("startup")
 async def _restore_db_settings():
-    """启动时从 DB 恢复持久化的 Key 和 Miner 状态（需在 lifespan 完成后执行）"""
-    # 延迟执行，等待 lifespan 中的 state 初始化完成
+    """Restore persisted Keys and Miner states from DB on startup (must run after lifespan completes)"""
+    # Deferred execution — wait for state initialization in lifespan to complete
     await asyncio.sleep(2)
     try:
         db_settings = await state.pg.get_all_settings()
@@ -805,7 +804,7 @@ async def _restore_db_settings():
 async def root_redirect(
     session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
 ):
-    """根路径：已登录 → /admin，未登录 → /login"""
+    """Root path: authenticated → /admin, unauthenticated → /login"""
     if _verify_session(session):
         return RedirectResponse(url="/admin", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
@@ -813,13 +812,13 @@ async def root_redirect(
 
 @app.get("/login", response_class=HTMLResponse, include_in_schema=False)
 async def login_page():
-    """管理员登录页"""
+    """Admin login page"""
     return _LOGIN_HTML.format(err_block='<div class="err" id="loginErr"></div>')
 
 
 @app.post("/login", include_in_schema=False)
 async def do_login(request: Request):
-    """校验密码并设置 session cookie"""
+    """Verify password and set session cookie"""
     form = await request.form()
     password = str(form.get("password", ""))
     if not secrets.compare_digest(password, _ADMIN_PASSWORD):
@@ -838,13 +837,13 @@ async def do_login(request: Request):
 
 @app.post("/demo-login", include_in_schema=False)
 async def demo_login_disabled():
-    """Demo 入口已关闭，重定向到登录页"""
+    """Demo entry closed, redirect to login page"""
     return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/logout", include_in_schema=False)
 async def logout():
-    """退出登录并清除 session cookie"""
+    """Log out and clear session cookie"""
     resp = RedirectResponse(url="/login", status_code=302)
     resp.delete_cookie(_SESSION_COOKIE)
     return resp
@@ -854,7 +853,7 @@ async def logout():
 async def admin_panel(
     session: Optional[str] = Cookie(None, alias=_SESSION_COOKIE),
 ):
-    """⚡ Lead Mining 综合管理控制台"""
+    """⚡ Lead Mining unified admin console"""
     is_admin = _verify_session(session)
     if not is_admin:
         return RedirectResponse(url="/login", status_code=302)
@@ -867,7 +866,7 @@ _ADMIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Lead Mining 控制台</title>
+<title>Lead Mining Console</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -976,7 +975,7 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
   <div style="display:flex;align-items:center;gap:12px">
     <div class="lang-sw">
       <button id="hdr-en" onclick="applyLang('en')">EN</button>
-      <button id="hdr-zh" onclick="applyLang('zh')">中文</button>
+      <button id="hdr-zh" onclick="applyLang('zh')">Chinese</button>
     </div>
     <a href="/docs" target="_blank" id="hdr-apidocs" style="font-size:.78rem;color:#64748b;text-decoration:none">API Docs ↗</a>
     <a href="/logout" id="hdr-logout" style="font-size:.78rem;color:#94a3b8;text-decoration:none;background:#1e293b;border:1px solid #334155;padding:4px 12px;border-radius:6px;transition:all .2s" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='#1e293b'">Log Out</a>
@@ -989,9 +988,9 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
   <div class="tab" id="tab3" onclick="switchTab(3)">&#128640; Mine Now</div>
 </div>
 <div class="content">
-  <!-- TAB 0: 监控面板 -->
+  <!-- TAB 0: Monitor Dashboard -->
   <div class="tab-panel active" id="tp0">
-    <p class="ts" id="ts0">加载中…</p>
+    <p class="ts" id="ts0">Loading...</p>
     <div class="grid" id="cards"></div>
     <div class="charts">
       <div class="chart-box"><h3 id="chart-funnel-title">&#128200; Mining Funnel</h3><canvas id="fc" height="200"></canvas></div>
@@ -1004,7 +1003,7 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
     </table>
   </div>
 
-  <!-- TAB 1: Miner 配置 -->
+  <!-- TAB 1: Miner Configuration -->
   <div class="tab-panel" id="tp1">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <span class="sec" id="miners-title" style="margin:0">Data Source Management</span>
@@ -1052,7 +1051,7 @@ input:checked+.slider:before{transform:translateX(18px);background:#fff}
 // ── i18n ──────────────────────────────────────────────────────────────────
 const I18N={
 en:{title:'\u26a1 Lead Mining Console',tab0:'\U0001F4C8 Monitor',tab1:'\u2699\ufe0f Miners',tab2:'\U0001F511 API Keys',tab3:'\U0001F680 Mine Now',logout:'Log Out',loading:'Loading\u2026',lastUpd:'Last updated: ',cardRaw:'Raw Leads',cardRawSub:'All Raw',cardEnr:'AI Enriched',cardEnrPre:'Rate ',cardAvg:'Avg Score',cardAvgSub:'/ 100',cardHigh:'High Intent 70+',cardHighSub:'Priority Outreach',cardEmails:'Emails Sent',cardEmail:'Has Email',cardEmailSub:'Direct Outreach',chartFunnel:'\U0001F4C8 Mining Funnel',chartTop:'\u2b50 Top Lead Scores',funnelLabels:['Raw','Enriched','70+','Outreached'],tableTitle:'\U0001F4E5 Top 20 High-Intent Leads',colCompany:'Company',colIndustry:'Industry',colAddress:'Address',colScore:'Score',colEmail2:'Email',colStatus:'Status',noData:'No enriched data yet',outreached:'Outreached',pending:'Pending',minersTitle:'Data Source Management',refreshBtn:'\u21bb Refresh',apiKeysTitle:'API Key Management',apiKeysSub:'Changes take effect immediately and persist to DB (restored after restart)',applyLink:'Apply \u2197',notConfigured:'Not configured',mineTitle:'Trigger Mining Task',kwLabel:'Keyword (required)',locLabel:'Location',limitLabel:'Max Count (1\u2013500)',srcLabel:'Sources (blank=all)',enrichLabel:'Gemini Enrich',scoreLabel:'Min Score Filter',mineBtn:'\U0001F680 Start Mining',mineBtnRunning:'Mining\u2026',mineWait:'\u23f3 Mining in progress, please wait\u2026',enterKw:'Please enter a keyword',enterVal:'Please enter a key value',enabled:'Enabled',disabled:'Disabled',noApiKey:'No API Key required',opFail:'Operation failed',saveFail:'Save failed',loadFail:'Load failed',configured:'\u2705 Configured',notConfiguredBadge:'\u274c Not Configured',saveBtn:'Save',demoBanner:'\U0001F441 Demo Mode \u2014 Read Only \u00b7 Write operations are disabled',demoExit:'Exit Demo'},
-zh:{title:'\u26a1 Lead Mining \u63a7\u5236\u53f0',tab0:'\U0001F4C8 \u76d1\u63a7\u9762\u677f',tab1:'\u2699\ufe0f Miner \u914d\u7f6e',tab2:'\U0001F511 API Keys',tab3:'\U0001F680 \u7acb\u5373\u91c7\u96c6',logout:'\u9000\u51fa\u767b\u5f55',loading:'\u52a0\u8f7d\u4e2d\u2026',lastUpd:'\u6700\u540e\u66f4\u65b0: ',cardRaw:'\u91c7\u96c6\u7ebf\u7d22',cardRawSub:'\u5168\u90e8 Raw',cardEnr:'AI \u5bcc\u5316',cardEnrPre:'\u7387 ',cardAvg:'\u5e73\u5747\u8bc4\u5206',cardAvgSub:'\u6ee1\u5206 100',cardHigh:'\u9ad8\u610f\u5411 70+',cardHighSub:'\u4f18\u5148\u5916\u5c55',cardEmails:'\u5df2\u53d1\u90ae\u4ef6',cardEmail:'\u542b\u90ae\u7b71',cardEmailSub:'\u53ef\u76f4\u63a5\u5916\u5c55',chartFunnel:'\U0001F4C8 \u91c7\u96c6\u6f0f\u6597',chartTop:'\u2b50 Top Leads \u8bc4\u5206',funnelLabels:['Raw','\u5bcc\u5316','70+','\u5df2\u5916\u5c55'],tableTitle:'\U0001F4E5 Top 20 \u9ad8\u610f\u5411\u7ebf\u7d22',colCompany:'\u516c\u53f8',colIndustry:'\u884c\u4e1a',colAddress:'\u5730\u5740',colScore:'\u8bc4\u5206',colEmail2:'\u90ae\u7b71',colStatus:'\u72b6\u6001',noData:'\u6682\u65e0\u5bcc\u5316\u6570\u636e',outreached:'\u5df2\u5916\u5c55',pending:'\u5f85\u5916\u5c55',minersTitle:'\u6570\u636e\u6e90\u7ba1\u7406',refreshBtn:'\u21bb \u5237\u65b0',apiKeysTitle:'API Key \u7ba1\u7406',apiKeysSub:'\u4fdd\u5b58\u540e\u7acb\u5373\u751f\u6548\uff0c\u5e76\u6301\u4e45\u5316\u5230\u6570\u636e\u5e93\uff08\u91cd\u542f\u540e\u81ea\u52a8\u6062\u590d\uff09',applyLink:'\u7533\u8bf7 \u2197',notConfigured:'\u672a\u914d\u7f6e',mineTitle:'\u624b\u52a8\u89e6\u53d1\u91c7\u96c6\u4efb\u52a1',kwLabel:'\u5173\u952e\u8bcd (\u5fc5\u586b)',locLabel:'\u5730\u533a',limitLabel:'\u6700\u591a\u6761\u6570 (1\u2013500)',srcLabel:'\u6570\u636e\u6e90\uff08\u7559\u7a7a=\u5168\u90e8\u542f\u7528\uff09',enrichLabel:'\u7acb\u5373 Gemini \u5bcc\u5316',scoreLabel:'\u6700\u4f4e\u8bc4\u5206\u8fc7\u6ee4',mineBtn:'\U0001F680 \u5f00\u59cb\u91c7\u96c6',mineBtnRunning:'\u91c7\u96c6\u4e2d\u2026',mineWait:'\u23f3 \u6b63\u5728\u91c7\u96c6\uff0c\u8bf7\u7a0d\u5019\u2026',enterKw:'\u8bf7\u8f93\u5165\u5173\u952e\u8bcd',enterVal:'\u8bf7\u8f93\u5165 Key \u503c',enabled:'\u5df2\u542f\u7528',disabled:'\u5df2\u7981\u7528',noApiKey:'\u65e0\u9700 API Key',opFail:'\u64cd\u4f5c\u5931\u8d25',saveFail:'\u4fdd\u5b58\u5931\u8d25',loadFail:'\u52a0\u8f7d\u5931\u8d25',configured:'\u2705 \u5df2\u914d\u7f6e',notConfiguredBadge:'\u274c \u672a\u914d\u7f6e',saveBtn:'\u4fdd\u5b58',demoBanner:'\U0001F441 \u6f14\u793a\u6a21\u5f0f \u2014 \u53ea\u8bfb \u00b7 \u5199\u64cd\u4f5c\u5df2\u7981\u7528',demoExit:'\u9000\u51fa\u6f14\u793a'}
+zh:{title:'\u26a1 Lead Mining Console',tab0:'\U0001F4C8 Monitor',tab1:'\u2699\ufe0f Miner Configuration',tab2:'\U0001F511 API Keys',tab3:'\U0001F680 Mine Now',logout:'Log Out',loading:'Loading\u2026',lastUpd:'Last updated: ',cardRaw:'Raw Leads',cardRawSub:'All Raw',cardEnr:'AI Enriched',cardEnrPre:'Rate ',cardAvg:'Avg Score',cardAvgSub:'Out of 100',cardHigh:'High Intent 70+',cardHighSub:'Priority Outreach',cardEmails:'Emails Sent',cardEmail:'Has Email',cardEmailSub:'Direct Outreach',chartFunnel:'\U0001F4C8 Mining Funnel',chartTop:'\u2b50 Top Lead Scores',funnelLabels:['Raw','Enriched','70+','Outreached'],tableTitle:'\U0001F4E5 Top 20 High-Intent Leads',colCompany:'Company',colIndustry:'Industry',colAddress:'Address',colScore:'Score',colEmail2:'Email',colStatus:'Status',noData:'No enriched data yet',outreached:'Outreached',pending:'Pending',minersTitle:'Data Source Management',refreshBtn:'\u21bb Refresh',apiKeysTitle:'API Key Management',apiKeysSub:'Changes take effect immediately and persist to DB (restored after restart)',applyLink:'Apply \u2197',notConfigured:'Not configured',mineTitle:'Trigger Mining Task',kwLabel:'Keyword (required)',locLabel:'Location',limitLabel:'Max Count (1\u2013500)',srcLabel:'Sources (blank=all)',enrichLabel:'Gemini Enrich',scoreLabel:'Min Score Filter',mineBtn:'\U0001F680 Start Mining',mineBtnRunning:'Mining\u2026',mineWait:'\u23f3 Mining in progress, please wait\u2026',enterKw:'Please enter a keyword',enterVal:'Please enter a key value',enabled:'Enabled',disabled:'Disabled',noApiKey:'No API Key required',opFail:'Operation failed',saveFail:'Save failed',loadFail:'Load failed',configured:'\u2705 Configured',notConfiguredBadge:'\u274c Not Configured',saveBtn:'Save',demoBanner:'\U0001F441 Demo Mode \u2014 Read Only \u00b7 Write operations are disabled',demoExit:'Exit Demo'}
 };
 let _lang=localStorage.getItem('lang')||'en';
 function t(k){const d=I18N[_lang]||I18N.en;return d[k]!==undefined?d[k]:k;}
@@ -1128,7 +1127,7 @@ function toast(msg,ok=true){
   setTimeout(()=>el.classList.remove('show'),2800);
 }
 
-// ── TAB 0: 监控面板 ───────────────────────────────────────────────────────
+// ── TAB 0: Monitor Dashboard ────────────────────────────────────────────
 async function loadDashboard(){
   try{
     const [stats,leads]=await Promise.all([
@@ -1174,7 +1173,7 @@ async function loadDashboard(){
   }catch(e){console.error(e);document.getElementById('htdot').style.background='#ef4444';}
 }
 
-// ── TAB 1: Miner 配置 ────────────────────────────────────────────────────
+// ── TAB 1: Miner Configuration ─────────────────────────────────────────
 async function loadSettings(){
   const res=await fetch('/admin/settings').then(r=>r.json()).catch(()=>null);
   if(!res){document.getElementById('miner-grid').innerHTML=`<p style="color:#fca5a5">${t('loadFail')}</p>`;return;}
@@ -1203,7 +1202,7 @@ async function loadSettings(){
       </div>
     </div>`;
   }).join('');
-  // 同步更新 API Keys tab
+  // Sync update for API Keys tab
   _lastSettings=res;
 }
 let _lastSettings=null;
@@ -1254,7 +1253,7 @@ async function saveKey(envKey,inputId){
   }else{toast(t('saveFail'),false);}
 }
 
-// ── TAB 3: 立即采集 ──────────────────────────────────────────────────────
+// ── TAB 3: Mine Now ─────────────────────────────────────────────────────
 async function startMine(){
   const kw=document.getElementById('m-kw').value.trim();
   if(!kw){toast(t('enterKw'),false);return;}
@@ -1288,7 +1287,7 @@ Duration : ${data.duration_sec}s
 ─────────────────────────────────────
 Sources:
 ${Object.entries(data.source_counts||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n')||'  (none)'}
-${Object.keys(data.errors||{}).length?'\\n错误:\\n'+Object.entries(data.errors||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n'):''}
+${Object.keys(data.errors||{}).length?'\\nErrors:\\n'+Object.entries(data.errors||{}).map(([k,v])=>`  ${k}: ${v}`).join('\\n'):''}
 ─────────────────────────────────────
 Top 5 Leads:
 ${(data.leads||[]).slice(0,5).map(l=>`  [${l.score||0}] ${l.business_name||''} | ${l.email||'no email'}`).join('\\n')||'(none)'}`;
@@ -1298,10 +1297,10 @@ ${(data.leads||[]).slice(0,5).map(l=>`  [${l.score||0}] ${l.business_name||''} |
   finally{btn.disabled=false;btn.textContent=t('mineBtn');}
 }
 
-// 初始化
+// Initialize
 if(window.DEMO){
   document.getElementById('demo-banner').classList.add('show');
-  // 禁用所有写操作按钮和输入框
+  // Disable all write operation buttons and inputs
   setTimeout(()=>{
     document.querySelectorAll('input[type=password],input[type=text],input[type=number]').forEach(el=>el.disabled=true);
     document.querySelectorAll('input[type=checkbox]').forEach(el=>el.disabled=true);

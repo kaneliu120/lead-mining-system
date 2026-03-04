@@ -1,6 +1,6 @@
 """
-Sales Outreach Engine — FastAPI 入口
-改造自 sales-outreach-automation-langgraph，接入 PostgresLeadLoader
+Sales Outreach Engine — FastAPI Entry Point
+Adapted from sales-outreach-automation-langgraph, integrated with PostgresLeadLoader
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
     logger.info("Sales Outreach Engine ready")
     yield
     await state.lead_loader.close()
-    await close_db_pool()     # 关闭 log_outreach 用的全局连接池
+    await close_db_pool()     # Close the global connection pool used by log_outreach
 
 
 app = FastAPI(
@@ -59,10 +59,10 @@ class OutreachRequest(BaseModel):
 @app.post("/outreach/run")
 async def run_outreach(req: OutreachRequest):
     """
-    触发一轮外展任务：
-    1. 从 PostgreSQL 读取待外展线索
-    2. 调用 LangGraph 流程生成个性化邮件
-    3. 发送邮件并记录 outreach_log
+    Trigger a round of outreach tasks:
+    1. Read pending outreach leads from PostgreSQL
+    2. Call LangGraph workflow to generate personalized emails
+    3. Send emails and record outreach_log
     """
     leads = await state.lead_loader.get_pending_leads(
         limit=req.limit,
@@ -89,7 +89,7 @@ async def run_outreach(req: OutreachRequest):
             ],
         }
 
-    # 执行 LangGraph 外展流程
+    # Execute LangGraph outreach workflow
     from src.graph import get_graph
     graph = get_graph()
 
@@ -99,7 +99,7 @@ async def run_outreach(req: OutreachRequest):
     for lead in leads:
         initial_state = {
             "lead":        lead,
-            "language":    req.language,    # P3-4: 传递语言选项
+            "language":    req.language,    # P3-4: pass language option
             "rag_context": None,
             "contacts":    [],
             "email_draft": None,
@@ -151,7 +151,7 @@ async def health():
 
 @app.post("/webhook/outreach-summary")
 async def webhook_outreach_summary(request: Request):
-    """接收 n8n 工作流 03 的外展汇总通知"""
+    """Receive outreach summary notification from n8n workflow 03"""
     body = await request.json()
     logger.info(f"[webhook] outreach-summary: {body}")
     return {
@@ -165,7 +165,7 @@ async def webhook_outreach_summary(request: Request):
 
 @app.post("/webhook/hot-lead")
 async def webhook_hot_lead(request: Request):
-    """接收 n8n 工作流 04 的热门潜客告警"""
+    """Receive hot lead alert from n8n workflow 04"""
     body = await request.json()
     logger.info(f"[webhook] HOT LEAD ALERT: {body}")
     return {
@@ -177,25 +177,25 @@ async def webhook_hot_lead(request: Request):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# P3-5: CRM 对接端点 (HubSpot / Pipedrive)
+# P3-5: CRM integration endpoints (HubSpot / Pipedrive)
 # ─────────────────────────────────────────────────────────────────────────────
 class CRMSyncRequest(BaseModel):
     min_score:        float          = 60.0
     industry_keyword: Optional[str]  = None
     limit:            int            = 50
-    lead_ids:         Optional[List[int]] = None    # 指定 ID 列表（可选）
+    lead_ids:         Optional[List[int]] = None    # Optional specified ID list
 
 
 @app.post("/crm/sync")
 async def crm_sync(req: CRMSyncRequest):
     """
-    P3-5: 将富化线索批量推送到已配置的 CRM（HubSpot / Pipedrive）。
+    P3-5: Batch push enriched leads to configured CRM (HubSpot / Pipedrive).
 
-    配置方法（.env）：
-      CRM_PROVIDER=hubspot            # 或 pipedrive
-      HUBSPOT_ACCESS_TOKEN=<token>    # HubSpot 私有 App Token
+    Configuration (.env):
+      CRM_PROVIDER=hubspot            # or pipedrive
+      HUBSPOT_ACCESS_TOKEN=<token>    # HubSpot Private App Token
       PIPEDRIVE_API_TOKEN=<token>     # Pipedrive API Token
-      PIPEDRIVE_COMPANY_DOMAIN=<dom>  # 如 mycompany.pipedrive.com
+      PIPEDRIVE_COMPANY_DOMAIN=<dom>  # e.g. mycompany.pipedrive.com
     """
     adapter = get_crm_adapter()
     if adapter is None:
@@ -205,7 +205,7 @@ async def crm_sync(req: CRMSyncRequest):
             "hint": "Set CRM_PROVIDER=hubspot or CRM_PROVIDER=pipedrive in .env",
         }
 
-    # 从数据库加载待同步线索
+    # Load leads to sync from database
     leads = await state.lead_loader.get_enriched_leads(
         min_score=req.min_score,
         industry_keyword=req.industry_keyword,
@@ -222,7 +222,7 @@ async def crm_sync(req: CRMSyncRequest):
 
 @app.get("/crm/health")
 async def crm_health():
-    """检查 CRM 连通性。"""
+    """Check CRM connectivity."""
     adapter = get_crm_adapter()
     if adapter is None:
         return {

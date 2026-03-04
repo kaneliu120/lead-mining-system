@@ -46,14 +46,14 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-leads}
       CHROMA_HOST:  chromadb
-      CHROMA_PORT:  "8000"           # 容器内端口
+      CHROMA_PORT:  "8000"           # Container internal port
     depends_on:
       postgres:
         condition: service_healthy
       chromadb:
         condition: service_healthy
     ports:
-      - "8010:8000"  # 宿主机 8010 → 容器内 8000，避免与其他项目充突
+      - "8010:8000"  # Host 8010 → container 8000, avoids conflicts with other projects
     volumes:
       - ./lead-mining-engine/config:/app/config:ro
     healthcheck:
@@ -86,18 +86,18 @@ services:
     image: n8nio/n8n:2.9.4
     restart: unless-stopped
     environment:
-      # n8n 2.x 认证 — 首次启动自动创建 Owner 账户（无需手动 Setup Wizard）
+      # n8n 2.x auth — auto-create Owner account on first startup (no manual Setup Wizard needed)
       N8N_USER_MANAGEMENT_JWT_SECRET: ${N8N_JWT_SECRET:-n8n-super-secret-jwt-key-2024}
       N8N_OWNER_EMAIL:                ${N8N_OWNER_EMAIL:-admin@leadminer.local}
       N8N_OWNER_FIRST_NAME:           ${N8N_OWNER_FIRST_NAME:-Admin}
       N8N_OWNER_LAST_NAME:            ${N8N_OWNER_LAST_NAME:-User}
       N8N_OWNER_PASSWORD:             ${N8N_OWNER_PASSWORD:-LeadMiner2024!}
-      # 公开 REST API（用于工作流测试）
+      # Public REST API (for workflow testing)
       N8N_PUBLIC_API_DISABLED:        "false"
-      # Webhook 回调地址
+      # Webhook callback URL
       WEBHOOK_URL:                    ${WEBHOOK_URL:-http://localhost:5678}
       N8N_EDITOR_BASE_URL:            ${N8N_EDITOR_BASE_URL:-http://localhost:5678}
-      # 数据库 — 使用已有 PostgreSQL（独立 schema 避免冲突）
+      # Database — uses existing PostgreSQL (independent schema to avoid conflicts)
       DB_TYPE:                        postgresdb
       DB_POSTGRESDB_HOST:             postgres
       DB_POSTGRESDB_PORT:             5432
@@ -105,14 +105,14 @@ services:
       DB_POSTGRESDB_USER:             ${POSTGRES_USER:-postgres}
       DB_POSTGRESDB_PASSWORD:         ${POSTGRES_PASSWORD:-postgres}
       DB_POSTGRESDB_SCHEMA:           n8n
-      # 传递给工作流 HTTP 节点可用的变量
+      # Variables passed to workflow HTTP nodes
       LEAD_MINER_URL:                 http://lead-miner:8000
       GEMINI_API_KEY:                 ${GEMINI_API_KEY}
-      # n8n 运行在 nginx HTTPS 反向代理之后，需要告知协议为 https
+      # n8n runs behind nginx HTTPS reverse proxy — must tell it the protocol is https
       N8N_PROTOCOL:                   "https"
       N8N_SECURE_COOKIE:              "true"
-      N8N_PROXY_HOPS:                 "1"        # 信任 nginx 传入的 X-Forwarded-For
-      # 日志
+      N8N_PROXY_HOPS:                 "1"        # Trust nginx-passed X-Forwarded-For
+      # Logs
       N8N_LOG_LEVEL:                  info
       N8N_LOG_OUTPUT:                 console
     depends_on:
@@ -120,7 +120,7 @@ services:
         condition: service_healthy
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n-workflows:/home/node/workflows:ro   # 供 CLI import 读取，非自动加载
+      - ./n8n-workflows:/home/node/workflows:ro   # for CLI import use, not auto-loaded
     ports:
       - "5678:5678"
     healthcheck:

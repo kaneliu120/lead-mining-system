@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
-# n8n 工作流自动导入脚本
-# 用法：./import_n8n_workflows.sh
-# 前提：n8n 容器已 healthy
+# n8n workflow auto-import script
+# Usage: ./import_n8n_workflows.sh
+# Prerequisite: n8n container must be healthy
 # ============================================================
 set -euo pipefail
 
@@ -11,7 +11,7 @@ WORKFLOWS_DIR="./n8n-workflows"
 
 echo -e "${GREEN}[n8n] Importing workflows via CLI...${NC}"
 
-# 等待 n8n 完全就绪
+# Wait for n8n to be fully ready
 wait_n8n() {
   local max=60 elapsed=0
   echo -n "  Waiting for n8n"
@@ -26,21 +26,21 @@ wait_n8n() {
 }
 wait_n8n
 
-# 使用 n8n CLI 导入每个工作流（在容器内执行）
+# Import each workflow using n8n CLI (executed inside container)
 imported=0
 failed=0
 for wf_file in "$WORKFLOWS_DIR"/*.json; do
   wf_name=$(basename "$wf_file" .json)
   
-  # 将 JSON 写入容器临时路径
+  # Copy JSON to container temp path
   docker compose cp "$wf_file" "n8n:/tmp/${wf_name}.json" 2>/dev/null
   
-  # 使用 n8n CLI 导入
+  # Import using n8n CLI
   if docker compose exec -T n8n n8n import:workflow --input="/tmp/${wf_name}.json" 2>&1 | grep -qiE "import|success|already"; then
     echo -e "  ${GREEN}✓${NC} Imported: $wf_name"
     ((imported++))
   else
-    # 捕获详细输出
+    # Capture detailed output
     output=$(docker compose exec -T n8n n8n import:workflow --input="/tmp/${wf_name}.json" 2>&1 || true)
     echo -e "  ${YELLOW}⚠${NC}  $wf_name: $output"
     ((failed++))
@@ -50,7 +50,7 @@ done
 echo ""
 echo -e "  Imported: ${GREEN}$imported${NC}  Failed: ${failed}"
 
-# 列出已导入的工作流（通过 DB 查询）
+# List imported workflows (via DB query)
 echo ""
 echo -e "${GREEN}[n8n] Workflows in database:${NC}"
 docker compose exec -T postgres psql \

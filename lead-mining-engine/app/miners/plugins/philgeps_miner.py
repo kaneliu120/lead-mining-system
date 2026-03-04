@@ -1,7 +1,7 @@
 """
-PhilGEPSMiner — Phase 3 政府采购系统爬取插件
+PhilGEPSMiner — Phase 3 Government Procurement System Mining Plugin
 Philippine Government Electronic Procurement System
-供应商数据质量高：含名称、地址、联系方式，均为合法经营企业
+High supplier data quality: includes name, address, contact information, all legally operating businesses
 """
 from __future__ import annotations
 
@@ -17,15 +17,15 @@ from app.models.lead import LeadRaw, LeadSource
 
 @dataclass
 class PhilGEPSConfig(MinerConfig):
-    rate_limit_per_minute: int = 5          # 政府网站，极保守限速
+    rate_limit_per_minute: int = 5          # Government website, extremely conservative rate limiting
     timeout_seconds: int = 60
 
 
 class PhilGEPSMiner(BrowserBasedMiner):
     """
-    菲律宾政府电子采购系统（PhilGEPS）爬取插件。
-    入口：https://www.philgeps.gov.ph
-    采集注册供应商名录，数据质量最高（均为合法注册企业）。
+    Philippines Government Electronic Procurement System (PhilGEPS) mining plugin.
+    Entry point: https://www.philgeps.gov.ph
+    Mine registered supplier directory, highest data quality (all legally registered businesses).
     """
 
     BASE_URL = "https://www.philgeps.gov.ph"
@@ -49,7 +49,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
         collected = 0
 
         try:
-            # ── 导航到供应商搜索页面 ────────────────────────────────────────
+            # ── Navigate to supplier search page ────────────────────────────────────────
             await page.goto(
                 f"{self.BASE_URL}/GEPS/Central/SearchBuyer/tabid/80/Default.aspx",
                 wait_until="networkidle",
@@ -57,7 +57,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
             )
             await asyncio.sleep(1)
 
-            # ── 填写搜索表单 ────────────────────────────────────────────────
+            # ── Fill in search form ────────────────────────────────────────────────
             kw_selectors = [
                 'input[id*="Keyword"]',
                 'input[name*="keyword"]',
@@ -85,7 +85,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
 
             await page.wait_for_load_state("networkidle", timeout=30000)
 
-            # ── 遍历分页结果 ────────────────────────────────────────────────
+            # ── Iterate paginated results ────────────────────────────────────────────────
             while collected < limit:
                 rows = await page.query_selector_all(
                     "table tr:not(:first-child), "
@@ -126,7 +126,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
                     )
                     collected += 1
 
-                # ── 翻页 ────────────────────────────────────────────────────
+                # ── Next page ────────────────────────────────────────────────────
                 next_btn = await page.query_selector(
                     "a:has-text('Next'), "
                     "a[title='Next page'], "
@@ -137,7 +137,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
 
                 await next_btn.click()
                 await page.wait_for_load_state("networkidle", timeout=20000)
-                await asyncio.sleep(2)          # 礼貌延迟
+                await asyncio.sleep(2)          # Polite delay
 
         except Exception as exc:
             self.logger.error(f"PhilGEPS mining failed: {exc}")
@@ -145,7 +145,7 @@ class PhilGEPSMiner(BrowserBasedMiner):
             await context.close()
 
     async def validate_config(self) -> bool:
-        return True                             # 无需配置
+        return True                             # No configuration needed
 
     async def health_check(self) -> MinerHealth:
         try:

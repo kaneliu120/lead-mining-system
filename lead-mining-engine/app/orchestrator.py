@@ -1,6 +1,6 @@
 """
-MiningOrchestrator — 核心调度器
-管理所有 Miner 插件的生命周期、去重、Fallback 和并发控制
+MiningOrchestrator — core scheduler
+Manages lifecycle, dedup, fallback, and concurrency control for all Miner plugins
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class MiningTask:
     keyword: str
     location: str = ""
     limit: int = 100
-    sources: Optional[List[str]] = None     # None = 所有已启用 miner
+    sources: Optional[List[str]] = None     # None = all enabled miners
 
 
 @dataclass
@@ -40,11 +40,11 @@ class MiningResult:
 
 class MiningOrchestrator:
     """
-    插件式 Miner 调度器。
-    - 注册/启动/停止 Miner 插件
-    - 并发调用多个 Miner，收集结果
-    - 基于 dedup_key 去重
-    - Source 级别 Fallback（主插件失败则切换备用）
+    Plugin-based Miner scheduler.
+    - Register/start/stop Miner plugins
+    - Concurrently call multiple Miners, collect results
+    - Deduplicate based on dedup_key
+    - Source-level fallback (switch to backup if primary plugin fails)
     """
 
     def __init__(self, max_concurrent_miners: int = 4, miner_timeout_seconds: int = 120):
@@ -60,8 +60,8 @@ class MiningOrchestrator:
         fallback_for: Optional[str] = None,
     ) -> None:
         """
-        注册 Miner 插件。
-        fallback_for: 当指定 source 失败时，启用本 Miner 作为备用。
+        Register a Miner plugin.
+        fallback_for: when the specified source fails, enable this Miner as backup.
         """
         name = miner.source_name.value
         self._miners[name] = miner
@@ -70,7 +70,7 @@ class MiningOrchestrator:
         logger.info(f"Orchestrator: registered miner '{name}' (fallback_for={fallback_for})")
 
     async def startup(self) -> None:
-        """并发启动所有已注册的 Miner"""
+        """Concurrently start all registered Miners"""
         if self._started:
             return
 
@@ -90,7 +90,7 @@ class MiningOrchestrator:
             logger.error(f"Orchestrator: failed to start '{name}': {exc}")
 
     async def shutdown(self) -> None:
-        """并发关闭所有 Miner"""
+        """Concurrently shut down all Miners"""
         tasks = [miner.on_shutdown() for miner in self._miners.values()]
         await asyncio.gather(*tasks, return_exceptions=True)
         self._started = False
@@ -98,11 +98,11 @@ class MiningOrchestrator:
 
     async def run_task(self, task: MiningTask) -> MiningResult:
         """
-        执行采集任务：
-        1. 确定要调用的 Miner 列表
-        2. 并发执行，超时保护
-        3. 合并结果、去重
-        4. 触发 Fallback（如有）
+        Execute a mining task:
+        1. Determine which Miners to call
+        2. Execute concurrently with timeout protection
+        3. Merge results and deduplicate
+        4. Trigger fallback (if any)
         """
         import time
         start = time.monotonic()
@@ -112,7 +112,7 @@ class MiningOrchestrator:
             logger.warning("Orchestrator: no active miners for task")
             return MiningResult(task=task, leads=[], source_counts={}, dedup_removed=0)
 
-        # 每个 Miner 分配的 limit
+        # Per-Miner limit
         per_miner_limit = max(task.limit // max(len(active_miners), 1), 10)
 
         tasks = [
@@ -129,7 +129,7 @@ class MiningOrchestrator:
             name = miner.source_name.value
             if isinstance(result, Exception):
                 errors[name] = str(result)
-                # 触发 Fallback
+                # Trigger fallback
                 fallback = await self._try_fallback(name, task, per_miner_limit)
                 if fallback:
                     all_leads.extend(fallback)
@@ -138,7 +138,7 @@ class MiningOrchestrator:
                 all_leads.extend(result)
                 source_counts[name] = len(result)
 
-        # 去重
+        # Deduplicate
         seen = set()
         deduped: List[LeadRaw] = []
         for lead in all_leads:
@@ -192,7 +192,7 @@ class MiningOrchestrator:
         task: MiningTask,
         limit: int,
     ) -> List[LeadRaw]:
-        """将 async generator 封装为可被 wait_for 管理的单一 coroutine"""
+        """Wrap an async generator as a single coroutine manageable by wait_for"""
         leads: List[LeadRaw] = []
         gen = miner.mine(
             keyword=task.keyword,
@@ -234,7 +234,7 @@ class MiningOrchestrator:
         return [m for m in self._miners.values() if m.config.enabled]
 
     async def health_check_all(self) -> Dict[str, MinerHealth]:
-        """并发检查所有 Miner 健康状态"""
+        """Concurrently check health status of all Miners"""
         tasks = {
             name: miner.health_check()
             for name, miner in self._miners.items()

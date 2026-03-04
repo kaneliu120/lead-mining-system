@@ -1,17 +1,17 @@
 """
-CRM Sync — Phase 3 销售 CRM 对接
-支持 HubSpot CRM API v3 和 Pipedrive API v1
+CRM Sync — Phase 3 Sales CRM Integration
+Supports HubSpot CRM API v3 and Pipedrive API v1
 
-使用方式：
-1. 设置环境变量（见各 Adapter 说明）
-2. 调用 POST /crm/sync 自动推送富化线索
-3. 外展成功后自动在 CRM 记录联系活动
+Usage:
+1. Set environment variables (see each Adapter's description)
+2. Call POST /crm/sync to automatically push enriched leads
+3. After successful outreach, automatically log contact activity in CRM
 
-环境变量：
-  CRM_PROVIDER=hubspot|pipedrive|none  (默认: none)
+Environment variables:
+  CRM_PROVIDER=hubspot|pipedrive|none  (default: none)
   HUBSPOT_ACCESS_TOKEN=<token>          (HubSpot Private App Token)
   PIPEDRIVE_API_TOKEN=<token>           (Pipedrive API Token)
-  PIPEDRIVE_COMPANY_DOMAIN=<domain>     (如 mycompany.pipedrive.com)
+  PIPEDRIVE_COMPANY_DOMAIN=<domain>     (e.g. mycompany.pipedrive.com)
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# ── 环境变量 ──────────────────────────────────────────────────────────────────
+# ── Environment variables ─────────────────────────────────────────────────────
 CRM_PROVIDER             = os.environ.get("CRM_PROVIDER", "none").lower()
 HUBSPOT_ACCESS_TOKEN     = os.environ.get("HUBSPOT_ACCESS_TOKEN", "")
 PIPEDRIVE_API_TOKEN      = os.environ.get("PIPEDRIVE_API_TOKEN", "")
@@ -33,10 +33,10 @@ PIPEDRIVE_COMPANY_DOMAIN = os.environ.get("PIPEDRIVE_COMPANY_DOMAIN", "api.piped
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 通用 CRM Lead 数据结构（与 LeadEnriched 对齐）
+# Common CRM Lead data structure (aligned with LeadEnriched)
 # ─────────────────────────────────────────────────────────────────────────────
 class CRMLead:
-    """统一 CRM 输入格式，屏蔽不同 CRM 的字段差异。"""
+    """Standardize CRM input format, abstracting away field differences between CRM platforms."""
 
     def __init__(
         self,
@@ -96,14 +96,14 @@ class CRMSyncResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 抽象基类
+# Abstract base class
 # ─────────────────────────────────────────────────────────────────────────────
 class BaseCRMAdapter(ABC):
-    """CRM 适配器抽象基类，强约束接口一致性。"""
+    """Abstract base class for CRM adapters — enforces interface consistency."""
 
     @abstractmethod
     async def push_lead(self, lead: CRMLead) -> CRMSyncResult:
-        """将单条线索推送到 CRM（创建或更新公司 + 联系人）。"""
+        """Push a single lead to the CRM (create or update company + contact)."""
 
     @abstractmethod
     async def log_activity(
@@ -113,11 +113,11 @@ class BaseCRMAdapter(ABC):
         email_body: str,
         contact_email: str,
     ) -> CRMSyncResult:
-        """在 CRM 中记录外展邮件活动（发送记录）。"""
+        """Log an outreach email activity in the CRM (send record)."""
 
     @abstractmethod
     async def health_check(self) -> bool:
-        """检查 CRM API 连通性。"""
+        """Check CRM API connectivity."""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,16 +125,16 @@ class BaseCRMAdapter(ABC):
 # ─────────────────────────────────────────────────────────────────────────────
 class HubSpotAdapter(BaseCRMAdapter):
     """
-    HubSpot CRM API v3 适配器。
+    HubSpot CRM API v3 adapter.
 
-    所需权限（Private App）：
+    Required permissions (Private App):
       crm.objects.contacts.write
       crm.objects.companies.write
       crm.objects.deals.write
       crm.objects.engagements.write
       crm.objects.associations.write
 
-    文档：https://developers.hubspot.com/docs/api/crm/contacts
+    Docs: https://developers.hubspot.com/docs/api/crm/contacts
     """
 
     BASE_URL = "https://api.hubapi.com"
@@ -147,7 +147,7 @@ class HubSpotAdapter(BaseCRMAdapter):
         }
 
     async def push_lead(self, lead: CRMLead) -> CRMSyncResult:
-        """先创建/更新 Company，再创建/更新 Contact 并关联。"""
+        """Create/update Company first, then create/update Contact and associate."""
         async with httpx.AsyncClient(timeout=15) as client:
 
             # ── Step 1: Upsert Company ─────────────────────────────────────
@@ -173,8 +173,8 @@ class HubSpotAdapter(BaseCRMAdapter):
             )
 
     async def _upsert_company(self, client: httpx.AsyncClient, lead: CRMLead) -> Optional[str]:
-        """搜索已有公司（按 name），不存在则创建。"""
-        # 搜索
+        """Search for existing company (by name), create if not found."""
+        # Search
         resp = await client.post(
             f"{self.BASE_URL}/crm/v3/objects/companies/search",
             headers=self._headers,
@@ -192,9 +192,9 @@ class HubSpotAdapter(BaseCRMAdapter):
         if resp.status_code == 200:
             results = resp.json().get("results", [])
             if results:
-                return results[0]["id"]    # 已存在，返回 ID
+                return results[0]["id"]    # Already exists, return ID
 
-        # 创建
+        # Create
         properties = {
             "name":         lead.business_name,
             "phone":        lead.phone,
@@ -202,14 +202,14 @@ class HubSpotAdapter(BaseCRMAdapter):
             "address":      lead.address,
             "industry":     lead.industry,
             "description":  lead.value_proposition[:500] if lead.value_proposition else "",
-            # 自定义字段（需在 HubSpot 中预先创建）
+            # Custom fields (must be pre-created in HubSpot)
             "lead_score":          str(int(lead.score)),
             "lead_source":         lead.source,
             "pain_points":         "; ".join(lead.pain_points[:3]),
             "outreach_angle":      lead.outreach_angle[:500] if lead.outreach_angle else "",
             "internal_lead_id":    str(lead.lead_id),
         }
-        # 过滤空值（HubSpot 拒绝空字符串）
+        # Filter empty values (HubSpot rejects empty strings)
         properties = {k: v for k, v in properties.items() if v}
 
         resp = await client.post(
@@ -228,8 +228,8 @@ class HubSpotAdapter(BaseCRMAdapter):
         lead: CRMLead,
         company_id: str,
     ) -> Optional[str]:
-        """创建或更新联系人，并关联到公司。"""
-        # 拆分姓名
+        """Create or update contact and associate with company."""
+        # Split name
         name_parts = (lead.contact_name or "").split(" ", 1)
         first_name = name_parts[0]
         last_name  = name_parts[1] if len(name_parts) > 1 else ""
@@ -244,14 +244,14 @@ class HubSpotAdapter(BaseCRMAdapter):
         }
         properties = {k: v for k, v in properties.items() if v}
 
-        # 尝试按 email upsert（HubSpot 会自动去重）
+        # Attempt email-based upsert (HubSpot auto-deduplicates)
         resp = await client.patch(
             f"{self.BASE_URL}/crm/v3/objects/contacts/{quote(lead.email, safe='')}?idProperty=email",
             headers=self._headers,
             json={"properties": properties},
         )
         if resp.status_code == 404:
-            # 不存在，创建
+            # Does not exist, create
             resp = await client.post(
                 f"{self.BASE_URL}/crm/v3/objects/contacts",
                 headers=self._headers,
@@ -263,7 +263,7 @@ class HubSpotAdapter(BaseCRMAdapter):
 
         contact_id = resp.json().get("id")
 
-        # 关联联系人 → 公司
+        # Associate contact → company
         await client.put(
             f"{self.BASE_URL}/crm/v3/associations/contacts/{contact_id}"
             f"/companies/{company_id}/contact_to_company",
@@ -278,7 +278,7 @@ class HubSpotAdapter(BaseCRMAdapter):
         email_body: str,
         contact_email: str,
     ) -> CRMSyncResult:
-        """在 HubSpot 创建 Email Engagement（外展记录）。"""
+        """Create an Email Engagement in HubSpot (outreach record)."""
         async with httpx.AsyncClient(timeout=15) as client:
             payload = {
                 "engagement": {
@@ -327,25 +327,25 @@ class HubSpotAdapter(BaseCRMAdapter):
 # ─────────────────────────────────────────────────────────────────────────────
 class PipedriveAdapter(BaseCRMAdapter):
     """
-    Pipedrive API v1 适配器。
+    Pipedrive API v1 adapter.
 
-    文档：https://developers.pipedrive.com/docs/api/v1
-    免费层（Essential）：开票前 14 天试用 + 3 用户免费席位（2024）
+    Docs: https://developers.pipedrive.com/docs/api/v1
+    Free tier (Essential): 14-day trial before billing + 3 free user seats (2024)
 
-    使用个人 API Token（Settings → API）。
-    公司域名可从 https://yourcompany.pipedrive.com 获取。
+    Use personal API Token (Settings → API).
+    Company domain from https://yourcompany.pipedrive.com.
     """
 
     def __init__(self, api_token: str, company_domain: str = "api.pipedrive.com"):
-        # domain 格式：api.pipedrive.com 或 yourcompany.pipedrive.com
+        # domain format: api.pipedrive.com or yourcompany.pipedrive.com
         base = company_domain if "pipedrive.com" in company_domain else f"{company_domain}.pipedrive.com"
         self._base = f"https://{base}/api/v1"
         self._token = api_token
-        # 使用 Authorization header 代替 URL 参数，防止令牌泄露到日志/Referer
+        # Use Authorization header instead of URL param to prevent token leaking into logs/Referer
         self._headers = {"Authorization": f"Bearer {api_token}"}
 
     async def push_lead(self, lead: CRMLead) -> CRMSyncResult:
-        """创建/更新 Organization（公司）+ Person（联系人）+ Lead（线索）。"""
+        """Create/update Organization (company) + Person (contact) + Lead."""
         async with httpx.AsyncClient(timeout=15) as client:
 
             # ── Step 1: Upsert Organization ────────────────────────────────
@@ -372,8 +372,8 @@ class PipedriveAdapter(BaseCRMAdapter):
             )
 
     async def _upsert_organization(self, client: httpx.AsyncClient, lead: CRMLead) -> Optional[int]:
-        """按 name 搜索组织，不存在则创建。"""
-        # 搜索
+        """Search for organization by name, create if not found."""
+        # Search
         resp = await client.get(
             f"{self._base}/organizations/search",
             headers=self._headers,
@@ -384,7 +384,7 @@ class PipedriveAdapter(BaseCRMAdapter):
             if items:
                 return items[0]["item"]["id"]
 
-        # 创建
+        # Create
         resp = await client.post(
             f"{self._base}/organizations",
             headers=self._headers,
@@ -404,7 +404,7 @@ class PipedriveAdapter(BaseCRMAdapter):
         lead: CRMLead,
         org_id: int,
     ) -> Optional[int]:
-        """按 email 搜索联系人，不存在则创建。"""
+        """Search for contact by email, create if not found."""
         if lead.email:
             resp = await client.get(
                 f"{self._base}/persons/search",
@@ -444,7 +444,7 @@ class PipedriveAdapter(BaseCRMAdapter):
         org_id: int,
         person_id: Optional[int],
     ) -> Optional[str]:
-        """创建 Pipedrive Lead（线索，不同于 Deal）。"""
+        """Create a Pipedrive Lead (different from a Deal)."""
         payload: Dict[str, Any] = {
             "title":          f"{lead.business_name} — {lead.industry}",
             "organization_id": org_id,
@@ -471,7 +471,7 @@ class PipedriveAdapter(BaseCRMAdapter):
         email_body: str,
         contact_email: str,
     ) -> CRMSyncResult:
-        """在 Pipedrive 记录外展 Email Activity。"""
+        """Log an outreach Email Activity in Pipedrive."""
         async with httpx.AsyncClient(timeout=15) as client:
             payload = {
                 "subject":   subject,
@@ -510,12 +510,12 @@ class PipedriveAdapter(BaseCRMAdapter):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 工厂函数：根据环境变量创建对应的 CRM Adapter
+# Factory function: create the appropriate CRM Adapter based on environment variable
 # ─────────────────────────────────────────────────────────────────────────────
 def get_crm_adapter() -> Optional[BaseCRMAdapter]:
     """
-    根据 CRM_PROVIDER 环境变量返回对应适配器实例。
-    CRM_PROVIDER=none（默认）时返回 None，不执行任何 CRM 操作。
+    Return the appropriate adapter instance based on the CRM_PROVIDER environment variable.
+    Returns None when CRM_PROVIDER=none (default), performing no CRM operations.
     """
     if CRM_PROVIDER == "hubspot":
         if not HUBSPOT_ACCESS_TOKEN:
@@ -532,22 +532,22 @@ def get_crm_adapter() -> Optional[BaseCRMAdapter]:
             company_domain=PIPEDRIVE_COMPANY_DOMAIN,
         )
 
-    # CRM_PROVIDER=none 或未设置
+    # CRM_PROVIDER=none or not set
     return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 批量同步工具函数（供 API 端点调用）
+# Batch sync utility function (for use by API endpoints)
 # ─────────────────────────────────────────────────────────────────────────────
 async def sync_leads_to_crm(
     leads: List[Dict[str, Any]],
     adapter: Optional[BaseCRMAdapter] = None,
 ) -> Dict[str, Any]:
     """
-    批量将 leads_enriched 线索推送到 CRM。
-    leads 格式：从 PostgreSQL leads_enriched 查询返回的字典列表。
+    Batch push leads_enriched leads to CRM.
+    leads format: list of dicts returned from PostgreSQL leads_enriched query.
 
-    返回：
+    Returns:
       {synced: int, skipped: int, failed: int, results: [...]}
     """
     if adapter is None:
@@ -621,5 +621,5 @@ async def sync_leads_to_crm(
         "skipped":  skipped,
         "failed":   failed,
         "provider": CRM_PROVIDER,
-        "results":  results[:50],    # 限制返回条数
+        "results":  results[:50],    # Limit returned records
     }

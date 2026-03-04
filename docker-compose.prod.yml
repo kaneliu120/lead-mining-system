@@ -1,5 +1,5 @@
-# 生产环境 docker-compose — 使用 GHCR 预构建镜像（GitHub Actions CI/CD 推送）
-# 使用方式：docker compose -f docker-compose.prod.yml up -d
+# Production docker-compose — uses GHCR pre-built images (pushed by GitHub Actions CI/CD)
+# Usage: docker compose -f docker-compose.prod.yml up -d
 version: "3.9"
 
 services:
@@ -112,11 +112,11 @@ services:
       DB_POSTGRESDB_SCHEMA:           n8n
       LEAD_MINER_URL:                 http://lead-miner:8000
       GEMINI_API_KEY:                 ${GEMINI_API_KEY}
-      # 通过 nginx HTTPS 代理时，设置协议为 https 以修复 cookie
+      # When proxied via nginx HTTPS, set protocol to https to fix cookies
       N8N_PROTOCOL:                   ${N8N_PROTOCOL:-https}
-      # Cookie 安全（HTTP 访问时必须设 false；如果配了 HTTPS 可删除此行）
+      # Cookie security (must be false for HTTP; remove this line if HTTPS is configured)
       N8N_SECURE_COOKIE:              "true"
-      N8N_PROXY_HOPS:                 "1"        # 信任 nginx 传入的 X-Forwarded-For
+      N8N_PROXY_HOPS:                 "1"        # Trust nginx-passed X-Forwarded-For
       N8N_LOG_LEVEL:                  info
     depends_on:
       postgres:
@@ -127,7 +127,7 @@ services:
     ports:
       - "5678:5678"
 
-  # ── Nginx 反代理 + SSL 入口 ──────────────────────────────────
+  # ── Nginx reverse proxy + SSL entrypoint ──────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
     restart: unless-stopped
@@ -144,7 +144,7 @@ services:
       - lead-miner
       - sales-outreach
 
-  # ── Certbot 自动 SSL 证书 ──────────────────────────────────────
+  # ── Certbot automatic SSL certificate ─────────────────────────────────────
   certbot:
     image: certbot/certbot:latest
     volumes:

@@ -129,7 +129,7 @@
   },
   "tags": [],
   "meta": {
-    "description": "每日触发 Lead Mining Engine 采集菲律宾 SME 数据，写入 PostgreSQL + ChromaDB"
+    "description": "Daily trigger for Lead Mining Engine — mine Philippines SME data into PostgreSQL + ChromaDB"
   },
   "id": "7e20d1b3-6adf-4e0c-8c6a-0e8b9a7beeb0"
 }

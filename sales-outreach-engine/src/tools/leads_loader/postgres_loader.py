@@ -1,6 +1,6 @@
 """
-PostgresLeadLoader — 从 PostgreSQL 读取已富化线索
-供 sales-outreach LangGraph 使用
+PostgresLeadLoader — Read enriched leads from PostgreSQL
+For use by the sales-outreach LangGraph
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 class PostgresLeadLoader:
     """
-    从 leads DB 加载已富化、尚未外展的线索。
-    供 LangGraph nodes.py 中的 get_new_leads 节点调用。
+    Load enriched leads that have not yet been outreached from the leads DB.
+    Called by the get_new_leads node in LangGraph nodes.py.
     """
 
     def __init__(self, dsn: str):
@@ -39,7 +39,8 @@ class PostgresLeadLoader:
         industry_keyword: Optional[str] = None,
     ) -> List[dict]:
         """
-        查询尚未外展（outreach_log 中无记录）且评分达标的线索。
+        Query leads that have not yet been outreached (no record in outreach_log)
+        and meet the minimum score threshold.
         """
         if self._pool is None:
             raise RuntimeError("PostgresLeadLoader not connected")
@@ -76,7 +77,7 @@ class PostgresLeadLoader:
         result = []
         for row in rows:
             d = dict(row)
-            # pain_points 存为 JSONB，需要解析
+            # pain_points stored as JSONB — needs parsing
             if isinstance(d.get("pain_points"), str):
                 try:
                     d["pain_points"] = json.loads(d["pain_points"])
@@ -86,7 +87,7 @@ class PostgresLeadLoader:
         return result
 
     async def mark_outreached(self, lead_id: int, email_sent_to: str) -> None:
-        """记录外展日志（防止重复发送）"""
+        """Record outreach log (prevent duplicate sends)"""
         if self._pool is None:
             return
         async with self._pool.acquire() as conn:
@@ -107,9 +108,9 @@ class PostgresLeadLoader:
         lead_ids: Optional[List[int]] = None,
     ) -> List[dict]:
         """
-        P3-5: 查询所有已富化线索（含已外展），用于推送到 CRM。
-        与 get_pending_leads 的区别：不过滤 outreach_log。
-        支持 lead_ids 指定列表过滤。
+        P3-5: Query all enriched leads (including outreached), for pushing to CRM.
+        Difference from get_pending_leads: does not filter by outreach_log.
+        Supports filtering by lead_ids list.
         """
         if self._pool is None:
             raise RuntimeError("PostgresLeadLoader not connected")

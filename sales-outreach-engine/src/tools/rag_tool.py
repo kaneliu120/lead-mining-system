@@ -1,6 +1,6 @@
 """
-RAG Tool — 供 LangGraph Agent 调用的 RAG 工具
-通过 Lead Mining Engine /rag/query 接口查询相似线索
+RAG Tool — RAG tool for use by LangGraph Agent
+Queries similar leads via the Lead Mining Engine /rag/query endpoint
 """
 from __future__ import annotations
 

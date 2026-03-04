@@ -1,6 +1,6 @@
 """
-SerperMiner — Phase 1 主力商户数据插件
-用 Serper google_maps API 替代 SerpAPI，成本降低 90%（$1/1K vs $10/1K）
+SerperMiner — Phase 1 Primary Business Data Plugin
+Uses Serper google_maps API to replace SerpAPI, 90% cost reduction ($1/1K vs $10/1K)
 """
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ class SerperConfig(MinerConfig):
 
 class SerperMiner(APIBasedMiner):
     """
-    Serper Google Maps API 插件。
-    文档: https://serper.dev/
-    免费额度: 2,500 次/月
-    付费: $1/1K 次（SerpAPI 的 1/10 价格）
+    Serper Google Maps API plugin.
+    Documentation: https://serper.dev/
+    Free quota: 2,500 calls/month
+    Paid: $1/1K calls (1/10 the price of SerpAPI)
     """
 
     def __init__(self, config: SerperConfig):
@@ -102,7 +102,7 @@ class SerperMiner(APIBasedMiner):
                 collected += 1
 
             if len(places) < self._cfg.results_per_page:
-                break           # 没有更多结果了
+                break           # No more results
             page += 1
 
     async def validate_config(self) -> bool:

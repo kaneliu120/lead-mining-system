@@ -1,59 +1,59 @@
-# Lead Mining System — 菲律宾 SME 自动化销售线索 & 外展系统
+# Lead Mining System — Philippines SME automated sales lead & outreach system
 
-## 系统架构
+## System Architecture
 
 ```
 lead-mining-system/
-├── lead-mining-engine/          # FastAPI 线索采集引擎
+├── lead-mining-engine/          # FastAPI Lead Mining Engine
 │   ├── app/
-│   │   ├── miners/plugins/      # 6个数据源插件
-│   │   ├── enrichers/           # Gemini AI 富化引擎
-│   │   ├── writers/             # PostgreSQL + ChromaDB + CSV 写入
-│   │   ├── orchestrator.py      # 调度器（去重+Fallback）
-│   │   ├── config.py            # 插件工厂
-│   │   └── api.py               # FastAPI 服务
-│   ├── config/miners.yaml       # 插件配置
-│   ├── tests/                   # 单元测试
+│   │   ├── miners/plugins/      # 6 data source plugins
+│   │   ├── enrichers/           # Gemini AI Enrichment Engine
+│   │   ├── writers/             # PostgreSQL + ChromaDB + CSV writer
+│   │   ├── orchestrator.py      # Orchestrator (deduplication + Fallback)
+│   │   ├── config.py            # Plugin factory
+│   │   └── api.py               # FastAPI service
+│   ├── config/miners.yaml       # Plugin configuration
+│   ├── tests/                   # Unit tests
 │   └── Dockerfile
-├── sales-outreach-engine/       # LangGraph 外展引擎
+├── sales-outreach-engine/       # LangGraph Outreach Engine
 │   ├── src/
-│   │   ├── state.py             # LangGraph 状态定义
-│   │   ├── nodes.py             # 5个处理节点
-│   │   ├── graph.py             # 工作流图
-│   │   └── tools/               # RAG工具 + PostgresLoader
+│   │   ├── state.py             # LangGraph state definition
+│   │   ├── nodes.py             # 5 processing nodes
+│   │   ├── graph.py             # Workflow graph
+│   │   └── tools/               # RAG tools + PostgresLoader
 │   └── Dockerfile
-├── n8n-workflows/               # 4条 n8n 编排工作流
-│   ├── 01-lead-mining.json      # 每日采集（每天早8AM）
-│   ├── 02-lead-enrichment.json  # AI富化（每6小时）
-│   ├── 03-sales-outreach.json   # 邮件外展（工作日早9AM）
-│   └── 04-reply-detection.json  # 回复识别（每2小时）
-├── docker-compose.yml           # 5服务编排
-└── .env.example                 # 环境变量模板
+├── n8n-workflows/               # 4 n8n orchestration workflows
+│   ├── 01-lead-mining.json      # Daily mining (every day at 8 AM)
+│   ├── 02-lead-enrichment.json  # AI enrichment (every 6 hours)
+│   ├── 03-sales-outreach.json   # Email outreach (weekdays at 9 AM)
+│   └── 04-reply-detection.json  # Reply detection (every 2 hours)
+├── docker-compose.yml           # 5-service orchestration
+└── .env.example                 # Environment variable template
 ```
 
-## 快速启动
+## Quick Start
 
-### 1. 准备 API Keys（Phase 1 必填）
+### 1. Prepare API Keys (Phase 1 required)
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入：
-# SERPER_API_KEY   - https://serper.dev（免费2500次/月）
-# APOLLO_API_KEY   - https://app.apollo.io（免费10K credits/月）
-# GEMINI_API_KEY   - https://aistudio.google.com/app/apikey（免费）
+# Edit .env and fill in:
+# SERPER_API_KEY   - https://serper.dev (free 2500 requests/month)
+# APOLLO_API_KEY   - https://app.apollo.io (free 10K credits/month)
+# GEMINI_API_KEY   - https://aistudio.google.com/app/apikey (free)
 ```
 
-### 2. 启动所有服务
+### 2. Start all services
 
 ```bash
 docker compose up -d
 
-# 等待约30秒，检查健康状态
+# Wait ~30 seconds, check health status
 docker compose ps
 curl http://localhost:8000/health
 ```
 
-### 3. 测试采集接口
+### 3. Test the mining endpoint
 
 ```bash
 curl -X POST http://localhost:8000/mine \
@@ -66,47 +66,47 @@ curl -X POST http://localhost:8000/mine \
   }'
 ```
 
-### 4. 导入 n8n 工作流
+### 4. Import n8n workflows
 
-1. 访问 http://localhost:5678（admin / changeme）
-2. 进入 `Settings → Workflows → Import from File`
-3. 依次导入 `n8n-workflows/` 下的 4 个 JSON 文件
-4. 配置 Gmail OAuth2 凭证（工作流 03, 04 需要）
-5. 激活工作流
+1. Visit http://localhost:5678 (admin / changeme)
+2. Go to `Settings → Workflows → Import from File`
+3. Import the 4 JSON files under `n8n-workflows/` in order
+4. Configure Gmail OAuth2 credentials (required by workflows 03, 04)
+5. Activate the workflows
 
-## API 端点
+## API Endpoints
 
-| 端点 | 方法 | 说明 |
+| Endpoint | Method | Description |
 |------|------|------|
-| `/mine` | POST | 触发采集（支持立即富化）|
-| `/leads` | GET | 查询线索（支持过滤和评分排序）|
-| `/rag/query` | POST | 语义相似度搜索（供 LangGraph 使用）|
-| `/leads/export` | GET | 导出 CSV / JSON |
-| `/health` | GET | 系统健康检查 |
+| `/mine` | POST | Trigger mining (supports immediate enrichment) |
+| `/leads` | GET | Query leads (supports filtering and score sorting) |
+| `/rag/query` | POST | Semantic similarity search (used by LangGraph) |
+| `/leads/export` | GET | Export CSV / JSON |
+| `/health` | GET | System health check |
 
-## 数据源插件（Phase 分期）
+## Data Source Plugins (Phased)
 
-| 插件 | Phase | 费用 | 说明 |
+| Plugin | Phase | Cost | Description |
 |------|-------|------|------|
-| SerperMiner | 1 | $1/1K 次 | Google Maps 商户搜索 |
-| ApolloMiner | 1 | 免费 10K/月 | B2B 联系人富化 |
-| GeminiEnricher | 1 | ~$0.13/千条 | AI 评分+外展建议 |
-| GoogleCSEMiner | 2 | 100次/天免费 | 搜索引擎补充数据 |
-| SECPhilippinesMiner | 2 | 完全免费 | 菲律宾 SEC 注册企业 |
-| RedditMiner | 2 | 完全免费 | 社交媒体线索 |
-| PhilGEPSMiner | 3 | 完全免费 | 政府采购供应商 |
+| SerperMiner | 1 | $1/1K requests | Google Maps business search |
+| ApolloMiner | 1 | Free 10K/month | B2B contact enrichment |
+| GeminiEnricher | 1 | ~$0.13/1K records | AI scoring + outreach suggestions |
+| GoogleCSEMiner | 2 | 100/day free | Search engine supplemental data |
+| SECPhilippinesMiner | 2 | Completely free | Philippines SEC registered companies |
+| RedditMiner | 2 | Completely free | Social media leads |
+| PhilGEPSMiner | 3 | Completely free | Government procurement suppliers |
 
-## 月成本估算
+## Monthly Cost Estimate
 
-| 服务 | 费用/月 |
+| Service | Cost/month |
 |------|---------|
-| Serper API（~5K 次） | $5 |
-| Apollo（免费层）| $0 |
-| Gemini 2.0 Flash（~50K条富化）| ~$10 |
-| VPS（2核4G，建议 Hetzner）| $8-15 |
-| **总计** | **~$23-30/月** |
+| Serper API (~5K requests) | $5 |
+| Apollo (free tier) | $0 |
+| Gemini 2.0 Flash (~50K records enriched) | ~$10 |
+| VPS (2-core 4GB, Hetzner recommended) | $8-15 |
+| **Total** | **~$23-30/month** |
 
-## 运行测试
+## Running Tests
 
 ```bash
 cd lead-mining-engine
@@ -114,27 +114,27 @@ pip install -r requirements.txt -r tests/requirements-test.txt
 pytest tests/ -v
 ```
 
-## LangGraph 外展流程图
+## LangGraph Outreach Flowchart
 
 ```
 Lead (from PostgreSQL)
     │
     ▼
-rag_retrieve     # 从 ChromaDB 检索相似案例上下文
+rag_retrieve     # Retrieve similar case context from ChromaDB
     │
     ▼
-find_contacts    # Apollo API 查询域名决策者邮箱
+find_contacts    # Query decision-maker email by domain via Apollo API
     │
     ▼
-generate_email   # Gemini 生成个性化邮件
+generate_email   # Gemini generates personalized email
     │
-    ├─ (无邮箱/错误) → END
-    │
-    ▼
-send_email       # SMTP/Gmail 发送
+    ├─ (no email/error) → END
     │
     ▼
-log_outreach     # 写 outreach_log 防重复
+send_email       # SMTP/Gmail send
+    │
+    ▼
+log_outreach     # Write to outreach_log to prevent duplicates
     │
     ▼
    END

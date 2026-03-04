@@ -1,6 +1,6 @@
 """
-SECPhilippinesMiner — Phase 2 政府数据插件
-菲律宾证券交易委员会（SEC）9 个公开 API，完全免费
+SECPhilippinesMiner — Phase 2 Government Data Plugin
+Philippines Securities and Exchange Commission (SEC) 9 public APIs, completely free
 """
 from __future__ import annotations
 
@@ -15,16 +15,16 @@ from app.models.lead import LeadRaw, LeadSource
 
 @dataclass
 class SECPhConfig(MinerConfig):
-    # 无需 API Key，完全免费
-    rate_limit_per_minute: int = 20         # 政府 API，保守限速
+    # No API Key required, completely free
+    rate_limit_per_minute: int = 20         # Government API, conservative rate limiting
     timeout_seconds: int = 30
 
 
 class SECPhilippinesMiner(APIBasedMiner):
     """
-    菲律宾证券交易委员会（SEC）公开 API 插件。
-    可获取：公司注册信息、类型、状态、地址、董事名单等。
-    文档: https://services.sec.gov.ph/online/api/
+    Philippines Securities and Exchange Commission (SEC) public API plugin.
+    Can retrieve: company registration information, type, status, address, director list, etc.
+    Documentation: https://services.sec.gov.ph/online/api/
     """
 
     def __init__(self, config: SECPhConfig):
@@ -45,7 +45,7 @@ class SECPhilippinesMiner(APIBasedMiner):
         lng: Optional[float] = None,
         limit: int = 100,
     ) -> AsyncIterator[LeadRaw]:
-        """按公司名称关键词搜索 SEC 注册企业"""
+        """Search SEC-registered companies by company name keyword"""
         try:
             response = await self._request_with_retry(
                 "GET",
@@ -61,7 +61,7 @@ class SECPhilippinesMiner(APIBasedMiner):
             self.logger.warning(f"SEC PH search failed for '{keyword}': {exc}")
             return
 
-        # SEC API 返回格式：list 或 {"companyList": [...]}
+        # SEC API response format: list or {"companyList": [...]}
         if isinstance(data, list):
             companies = data
         elif isinstance(data, dict):
@@ -81,7 +81,7 @@ class SECPhilippinesMiner(APIBasedMiner):
                 or company.get("id", "")
             )
 
-            # 尝试获取详细信息
+            # Attempt to retrieve detailed information
             details: dict = {}
             if sec_no:
                 try:
@@ -117,7 +117,7 @@ class SECPhilippinesMiner(APIBasedMiner):
             )
 
     async def validate_config(self) -> bool:
-        return True     # 无需 API Key
+        return True     # No API Key required
 
     async def health_check(self) -> MinerHealth:
         try:

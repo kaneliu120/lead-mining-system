@@ -1,10 +1,10 @@
 """
-Rate Limit Middleware — 基于令牌桶算法的 API 速率限制
-P2-6：防止单个 IP 超速，保护上游 API 配额
+Rate Limit Middleware — token-bucket-based API rate limiting
+P2-6: Prevent single-IP over-speed, protect upstream API quota
 
-令牌桶参数说明：
-  rate     = 每秒补充的令牌数（= requests_per_minute / 60）
-  capacity = 桶的最大容量（允许的突发量）
+Token bucket parameters:
+  rate     = tokens refilled per second (= requests_per_minute / 60)
+  capacity = max bucket capacity (allowed burst size)
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from starlette.responses import JSONResponse
 
 
 def _parse_trusted_proxies() -> FrozenSet[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    """从环境变量 TRUSTED_PROXY_IPS 解析可信代理 IP/CIDR 列表"""
+    """Parse trusted proxy IP/CIDR list from TRUSTED_PROXY_IPS env var"""
     raw = os.environ.get("TRUSTED_PROXY_IPS", "127.0.0.1,172.16.0.0/12")
     networks = set()
     for entry in raw.split(","):
@@ -35,7 +35,7 @@ def _parse_trusted_proxies() -> FrozenSet[ipaddress.IPv4Network | ipaddress.IPv6
 
 
 def _is_trusted_proxy(client_ip: str, trusted: FrozenSet) -> bool:
-    """判断 client_ip 是否在可信代理网段内"""
+    """Check if client_ip is within a trusted proxy subnet"""
     try:
         addr = ipaddress.ip_address(client_ip)
         return any(addr in net for net in trusted)
@@ -43,9 +43,9 @@ def _is_trusted_proxy(client_ip: str, trusted: FrozenSet) -> bool:
         return False
 
 
-# ── 令牌桶 ────────────────────────────────────────────────────────────────────
+# ── Token bucket ─────────────────────────────────────────────────────────────
 class _TokenBucket:
-    """异步令牌桶（滑动填充），支持并发访问"""
+    """Async token bucket (sliding refill), supports concurrent access"""
 
     __slots__ = ("rate", "capacity", "_tokens", "_last_ts", "_lock")
 
@@ -59,7 +59,7 @@ class _TokenBucket:
     async def consume(self, tokens: int = 1) -> bool:
         async with self._lock:
             now = time.monotonic()
-            # 补充令牌
+            # Refill tokens
             self._tokens = min(
                 self.capacity,
                 self._tokens + (now - self._last_ts) * self.rate,
@@ -71,18 +71,18 @@ class _TokenBucket:
             return False
 
 
-# ── 中间件 ────────────────────────────────────────────────────────────────────
+# ── Middleware ───────────────────────────────────────────────────────────────
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    全局 IP 级 API 速率限制。
+    Global IP-level API rate limiting.
 
-    规则（按端点前缀匹配，越精确越优先）：
-      /mine      → 10 req/min，burst 10   （重型采集任务）
-      /enrich    → 5  req/min，burst 5    （AI 富化，保护 Gemini 配额）
-      /rag/query → 20 req/min，burst 20
-      其他        → 60 req/min，burst 60
+    Rules (match by endpoint prefix, more specific = higher priority):
+      /mine      → 10 req/min, burst 10   (heavy mining tasks)
+      /enrich    → 5  req/min, burst 5    (AI enrichment, protect Gemini quota)
+      /rag/query → 20 req/min, burst 20
+      others     → 60 req/min, burst 60
 
-    不受限路径：/health /docs /redoc /openapi.json /dashboard /stats
+    Unrestricted paths: /health /docs /redoc /openapi.json /dashboard /stats
     """
 
     # (rate_per_sec, capacity)
@@ -104,7 +104,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._trusted_proxies = _parse_trusted_proxies()
         # (client_ip, path_key) → TokenBucket
         self._buckets:   Dict[Tuple[str, str], _TokenBucket] = {}
-        # 每 10 分钟清理一次不活跃的桶（避免内存泄漏）
+        # Clean up inactive buckets every 10 minutes (prevent memory leaks)
         self._last_gc    = time.monotonic()
         self._gc_interval = 600
 
@@ -125,7 +125,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         allowed = await self._buckets[key].consume()
 
-        # 定期 GC
+        # Periodic GC
         now = time.monotonic()
         if now - self._last_gc > self._gc_interval:
             self._gc()
@@ -146,12 +146,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
-    # ── 辅助 ──────────────────────────────────────────────────────────────────
+    # ── Helpers ─────────────────────────────────────────────────────────────────
 
     def _get_client_ip(self, request: Request) -> str:
         """
-        安全获取客户端 IP：仅当直连 IP 属于可信代理时才信任 X-Forwarded-For，
-        否则使用 TCP 连接的真实 IP，防止 IP 欺骗绕过速率限制。
+        Safely retrieve client IP: trust X-Forwarded-For only when the direct IP belongs to a trusted proxy,
+        otherwise use the real TCP connection IP to prevent IP spoofing from bypassing rate limiting.
         """
         direct_ip = request.client.host if request.client else ""
         if direct_ip and _is_trusted_proxy(direct_ip, self._trusted_proxies):
@@ -161,14 +161,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return direct_ip or "anonymous"
 
     def _match_rule(self, path: str) -> Tuple[float, int, str]:
-        """返回 (rate, capacity, path_key)"""
+        """Return (rate, capacity, path_key)"""
         for prefix, rate, cap in self._RULES:
             if path.startswith(prefix):
                 return rate, cap, prefix.lstrip("/")
         return self._DEFAULT[0], self._DEFAULT[1], "default"
 
     def _gc(self) -> None:
-        """移除长时间不活跃的令牌桶（节省内存）"""
+        """Remove long-inactive token buckets (save memory)"""
         cutoff = time.monotonic() - self._gc_interval
         stale  = [k for k, b in self._buckets.items() if b._last_ts < cutoff]
         for k in stale:

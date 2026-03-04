@@ -1,4 +1,4 @@
-"""Lead Mining Engine 入口"""
+"""Lead Mining Engine entry point"""
 import uvicorn
 from app.api import app
 

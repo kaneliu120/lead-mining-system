@@ -1,6 +1,6 @@
 """
-APIBasedMiner — 基于 HTTP API 的数据源插件基类
-封装 httpx.AsyncClient 生命周期、速率限制、指数退避重试
+APIBasedMiner — HTTP-API-based data source plugin base class
+Wraps httpx.AsyncClient lifecycle, rate limiting, exponential backoff retry
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.miners.base import BaseMiner, MinerConfig
 
 
 class _AsyncTokenBucket:
-    """异步令牌桶速率限制器，确保 API 请求不超过配置的速率"""
+    """Async token bucket rate limiter, ensures API requests do not exceed configured rate"""
 
     __slots__ = ("_rate", "_capacity", "_tokens", "_last_ts", "_lock")
 
@@ -27,7 +27,7 @@ class _AsyncTokenBucket:
         self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
-        """等待直到获取一个令牌"""
+        """Wait until a token is acquired"""
         while True:
             async with self._lock:
                 now = time.monotonic()
@@ -39,17 +39,17 @@ class _AsyncTokenBucket:
                 if self._tokens >= 1.0:
                     self._tokens -= 1.0
                     return
-            # 令牌不足，等待一小段时间后重试
+            # Insufficient tokens — wait briefly and retry
             await asyncio.sleep(1.0 / max(self._rate, 0.1))
 
 
 class APIBasedMiner(BaseMiner):
     """
-    基于 HTTP API 的数据源插件基类。
+    HTTP API-based data source plugin base class.
 
-    子类通过 self.client 调用 API，
-    通过 self._request_with_retry() 获得自动重试。
-    运行时自动执行 config.rate_limit_per_minute 定义的速率限制。
+    Subclasses call the API via self.client,
+    and get automatic retry via self._request_with_retry().
+    Automatically enforces the rate limit defined in config.rate_limit_per_minute at runtime.
     """
 
     def __init__(
@@ -64,7 +64,7 @@ class APIBasedMiner(BaseMiner):
         self._client: Optional[httpx.AsyncClient] = None
         self._rate_limiter = _AsyncTokenBucket(config.rate_limit_per_minute)
 
-    # ── 生命周期 ──────────────────────────────────────────────────────────────
+    # ── Lifecycle ──────────────────────────────────────────────────────────────
 
     async def on_startup(self) -> None:
         self._client = httpx.AsyncClient(
@@ -85,7 +85,7 @@ class APIBasedMiner(BaseMiner):
             await self._client.aclose()
             self.logger.info(f"{self.__class__.__name__} HTTP client closed")
 
-    # ── 属性 ─────────────────────────────────────────────────────────────────
+    # ── Properties ──────────────────────────────────────────────────────────────
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -96,7 +96,7 @@ class APIBasedMiner(BaseMiner):
             )
         return self._client
 
-    # ── 工具方法 ──────────────────────────────────────────────────────────────
+    # ── Utility methods ─────────────────────────────────────────────────────────
 
     async def _request_with_retry(
         self,
@@ -106,17 +106,17 @@ class APIBasedMiner(BaseMiner):
         **kwargs,
     ) -> httpx.Response:
         """
-        带指数退避重试的 HTTP 请求。
+        HTTP request with exponential backoff retry.
 
-        重试触发条件：HTTP 4xx/5xx、连接错误、读取超时。
-        指数退避：1s → 2s → 4s。
+        Retry trigger conditions: HTTP 4xx/5xx, connection error, read timeout.
+        Exponential backoff: 1s → 2s → 4s.
         """
         max_retries = retries if retries is not None else self.config.max_retries
         last_error: Exception = RuntimeError("No attempts made")
 
         for attempt in range(max_retries + 1):
             try:
-                # 在发送请求前执行速率限制等待
+                # Execute rate limit wait before sending request
                 await self._rate_limiter.acquire()
                 response = await self.client.request(method, url, **kwargs)
                 response.raise_for_status()
@@ -124,16 +124,16 @@ class APIBasedMiner(BaseMiner):
             except httpx.HTTPStatusError as exc:
                 last_error = exc
                 status = exc.response.status_code
-                # 4xx 客户端错误（429 除外）是永久性错误，不重试，立即上报
+                # 4xx client errors (except 429) are permanent — do not retry, report immediately
                 if 400 <= status < 500 and status != 429:
                     hint = ""
                     if status == 403:
                         hint = (
-                            " [Hint: Serper Maps 403 可能是 Maps API 未开通。"
-                            "请登录 https://serper.dev 检查订阅计划及 API Key 权限]"
+                            " [Hint: Serper Maps 403 may mean the Maps API is not enabled."
+                            " Please log in to https://serper.dev and check your subscription plan and API Key permissions]"
                         )
                     self.logger.error(
-                        f"{self.__class__.__name__} HTTP {status} (不可重试): {exc}{hint}"
+                        f"{self.__class__.__name__} HTTP {status} (non-retryable): {exc}{hint}"
                     )
                     raise
                 if attempt < max_retries:

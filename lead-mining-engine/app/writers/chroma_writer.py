@@ -1,6 +1,6 @@
 """
-ChromaWriter — 向量数据库写入层
-使用 ChromaDB 支持语义搜索（RAG 查询），适合 sales-outreach 引擎调用
+ChromaWriter — vector database write layer
+Uses ChromaDB for semantic search (RAG queries), designed for the sales-outreach engine
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 class ChromaWriter:
     """
-    ChromaDB HTTP Client 封装（连接外部 DockerCompose 中的 ChromaDB 服务）。
-    Collection 按 industry_keyword 分区。
+    ChromaDB HTTP Client wrapper (connects to external ChromaDB service in DockerCompose).
+    Collections are partitioned by industry_keyword.
     """
 
     DEFAULT_COLLECTION = "all_leads"
@@ -39,7 +39,7 @@ class ChromaWriter:
         self._collection = None
 
     def connect(self) -> None:
-        """初始化 ChromaDB 客户端（同步），支持认证和 SSL"""
+        """Initialize ChromaDB client (synchronous), supports auth and SSL"""
         try:
             import chromadb
             from chromadb.config import Settings
@@ -61,13 +61,13 @@ class ChromaWriter:
             )
             ef = None
 
-        # 构建连接参数
+        # Build connection parameters
         client_kwargs = {
             "host": self.host,
             "port": self.port,
         }
 
-        # 配置认证
+        # Configure auth
         settings_kwargs = {}
         if self.auth_token:
             settings_kwargs["chroma_client_auth_provider"] = (
@@ -76,7 +76,7 @@ class ChromaWriter:
             settings_kwargs["chroma_client_auth_credentials"] = self.auth_token
             logger.info("ChromaWriter: token authentication enabled")
 
-        # 配置 SSL
+        # Configure SSL
         if self.use_ssl:
             client_kwargs["ssl"] = True
             logger.info("ChromaWriter: SSL/TLS enabled")
@@ -97,16 +97,16 @@ class ChromaWriter:
 
     def upsert_leads(self, leads: List[LeadRaw]) -> int:
         """
-        将线索转换为 ChromaDB Document 并 upsert。
-        document 字段用于嵌入，metadata 保存结构化字段供过滤。
+        Convert lead to a ChromaDB Document and upsert.
+        The document field is used for embedding; metadata stores structured fields for filtering.
         """
         if self._collection is None:
             raise RuntimeError("ChromaWriter not connected")
 
         docs, ids, metas = [], [], []
         for lead in leads:
-            doc_text = lead.to_chroma_document()       # 返回纯文本字符串
-            ids.append(lead.dedup_key())               # 用 dedup_key 作为 ChromaDB 文档 ID
+            doc_text = lead.to_chroma_document()       # Returns a plain-text string
+            ids.append(lead.dedup_key())               # Use dedup_key as ChromaDB document ID
             docs.append(doc_text)
             metas.append({
                 "source":           lead.source.value,
@@ -121,7 +121,7 @@ class ChromaWriter:
         if not docs:
             return 0
 
-        # Chroma upsert 支持批量（不存在则 insert，存在则 update）
+        # Chroma upsert supports batch (insert if not exists, update if exists)
         self._collection.upsert(
             ids=ids,
             documents=docs,
@@ -137,8 +137,8 @@ class ChromaWriter:
         where: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        语义相似度查询，供 sales-outreach RAG 使用。
-        返回格式：[{id, document, distance, metadata}, ...]
+        Semantic similarity query for use by the sales-outreach RAG.
+        Return format: [{id, document, distance, metadata}, ...]
         """
         if self._collection is None:
             raise RuntimeError("ChromaWriter not connected")
@@ -174,7 +174,7 @@ class ChromaWriter:
         return output
 
     def delete_by_source(self, source: str) -> int:
-        """删除某个 source 的所有文档（用于重新采集时清空旧数据）"""
+        """Delete all documents for a given source (to clear old data before re-mining)"""
         if self._collection is None:
             raise RuntimeError("ChromaWriter not connected")
 
@@ -184,7 +184,7 @@ class ChromaWriter:
         return count
 
     def count(self) -> int:
-        """返回 collection 中的文档总数"""
+        """Return total document count in the collection"""
         if self._collection is None:
             return 0
         return self._collection.count()

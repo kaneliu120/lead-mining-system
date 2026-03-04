@@ -171,7 +171,7 @@ for wf in ./n8n-workflows/*.json; do
 done
 ok "$importedwf n8n workflow(s) processed"
 
-# 修正工作流显示顺序：01 排最前
+# Fix workflow display order: 01 first
 docker compose exec -T postgres psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-leads}" -c "
 UPDATE n8n.workflow_entity SET \"updatedAt\"='2026-01-01 13:00:04+00' WHERE name LIKE '01%';
 UPDATE n8n.workflow_entity SET \"updatedAt\"='2026-01-01 13:00:03+00' WHERE name LIKE '02%';

@@ -1,6 +1,6 @@
 """
-ApolloMiner — Phase 1 联系人富化插件
-Apollo.io 免费层 10K credits/月，270M+ 联系人数据库
+ApolloMiner — Phase 1 Contact Enrichment Plugin
+Apollo.io free tier: 10K credits/month, 270M+ contact database
 """
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ from app.models.lead import ContactLead, LeadRaw, LeadSource
 @dataclass
 class ApolloConfig(MinerConfig):
     api_key: str = ""
-    # 免费层：10K credits/月，每次 mixed_companies/search 消耗 1 credit
+    # Free tier: 10K credits/month, each mixed_companies/search call costs 1 credit
 
 
 class ApolloMiner(APIBasedMiner):
     """
-    Apollo.io 联系人富化插件。
-    文档: https://apolloio.github.io/apollo-api-docs/
-    免费层: 10K credits/月（足够菲律宾 SME 市场使用）
+    Apollo.io contact enrichment plugin.
+    Docs: https://apolloio.github.io/apollo-api-docs/
+    Free tier: 10K credits/month (sufficient for the Philippines SME market)
     """
 
     def __init__(self, config: ApolloConfig):
@@ -45,10 +45,10 @@ class ApolloMiner(APIBasedMiner):
         lng: Optional[float] = None,
         limit: int = 100,
     ) -> AsyncIterator[LeadRaw]:
-        """通过组织关键词搜索返回公司级别 LeadRaw"""
+        """Search and return company-level LeadRaw by organization keyword"""
         page = 1
         collected = 0
-        per_page = min(25, limit)           # Apollo 单次最多 25 条
+        per_page = min(25, limit)           # Apollo max 25 per request
 
         while collected < limit:
             payload = {
@@ -78,7 +78,7 @@ class ApolloMiner(APIBasedMiner):
                 if collected >= limit:
                     break
                 website = org.get("website_url", "")
-                # 清理 protocal prefix
+                # Strip protocol prefix
                 yield LeadRaw(
                     source=LeadSource.APOLLO,
                     business_name=org.get("name", ""),
@@ -108,8 +108,8 @@ class ApolloMiner(APIBasedMiner):
         limit: int = 5,
     ) -> List[ContactLead]:
         """
-        根据企业域名查找联系人（决策者邮箱、职位、LinkedIn）。
-        调用 /v1/mixed_people/search，消耗 credits。
+        Find contacts by company domain (decision-maker email, job title, LinkedIn).
+        Calls /v1/mixed_people/search, consumes credits.
         """
         response = await self._request_with_retry(
             "POST",
@@ -122,7 +122,7 @@ class ApolloMiner(APIBasedMiner):
                 "api_key": self.api_key,
                 "q_organization_domains": domain,
                 "per_page": min(limit, 25),
-                # 优先搜索 C-level / 决策者
+                # Prioritize C-level / decision makers
                 "person_titles": [
                     "CEO", "Founder", "Owner", "Manager",
                     "Director", "President", "VP",

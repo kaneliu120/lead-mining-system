@@ -50,7 +50,7 @@
         460,
         300
       ],
-      "notes": "直接对 DB 中未富化线索调用 Gemini，不消耗 Serper/Apollo 配额"
+      "notes": "Directly enrich un-enriched leads in DB via Gemini — does not consume Serper/Apollo quota"
     },
     {
       "parameters": {
@@ -97,7 +97,7 @@
   },
   "tags": [],
   "meta": {
-    "description": "每6小时将 DB 中未富化线索批量提交 Gemini 2.0 Flash 深度分析评分，无需重新采集"
+    "description": "Every 6 hours, batch-submit un-enriched leads in DB to Gemini 2.0 Flash for deep scoring — no re-mining required"
   },
   "id": "971eaf99-fd28-4256-92e6-08da9920a089"
 }

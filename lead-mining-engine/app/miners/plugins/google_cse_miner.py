@@ -1,6 +1,6 @@
 """
-GoogleCSEMiner — Phase 2 搜索引擎补充数据插件
-Google Custom Search Engine API，100 次/天免费
+GoogleCSEMiner — Phase 2 Search Engine Supplementary Data Plugin
+Google Custom Search Engine API, 100 requests/day free
 """
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ class GoogleCSEConfig(MinerConfig):
     api_key: str = ""
     cx: str = ""                            # Custom Search Engine ID
     country: str = "countryPH"
-    rate_limit_per_minute: int = 10         # 免费 100 次/天
+    rate_limit_per_minute: int = 10         # Free quota: 100 requests/day
 
 
 class GoogleCSEMiner(APIBasedMiner):
     """
-    Google Custom Search Engine Miner。
-    补充 Serper 未覆盖的菲律宾商业目录数据。
-    可针对特定网站（如 yellowpages.ph）进行定向搜索。
+    Google Custom Search Engine Miner.
+    Supplements Philippines business directory data not covered by Serper.
+    Can perform targeted searches on specific sites (e.g. yellowpages.ph).
     """
 
     def __init__(self, config: GoogleCSEConfig):
@@ -51,7 +51,7 @@ class GoogleCSEMiner(APIBasedMiner):
         query = f"{keyword} {location} Philippines contact".strip()
         start_index = 1
         collected = 0
-        max_google_results = 100            # Google CSE 最多返回 100 条
+        max_google_results = 100            # Google CSE returns at most 100 results
 
         while collected < limit and start_index <= max_google_results:
             batch = min(10, limit - collected)
@@ -80,7 +80,7 @@ class GoogleCSEMiner(APIBasedMiner):
                 orgs = page_map.get("organization") or page_map.get("localbusiness") or [{}]
                 org  = orgs[0] if orgs else {}
 
-                # 从 JSON-LD / pagemap 中提取结构化字段
+                # Extract structured fields from JSON-LD / pagemap
                 name = (
                     org.get("name")
                     or item.get("title", "").split(" - ")[0].split("|")[0].strip()[:200]

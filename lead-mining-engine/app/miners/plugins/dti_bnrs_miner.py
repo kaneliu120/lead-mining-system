@@ -1,20 +1,20 @@
 """
-DTIBNRSMiner — Phase 3 菲律宾贸工部商号注册系统爬取插件
+DTIBNRSMiner — Phase 3 Philippines Department of Trade and Industry Business Name Registration System Mining Plugin
 Department of Trade and Industry — Business Name Registration System
 
-目标网站：https://bnrs.dti.gov.ph
-数据内容：菲律宾合法注册商号、注册人地址、行业分类
+Target website: https://bnrs.dti.gov.ph
+Data content: Philippines legally registered business names, registrant address, industry classification
 
-数据质量说明：
-  - 100% 合法注册企业（政府官方数据库）
-  - 覆盖个体商户（sole proprietorship）和小企业
-  - 含商号、注册人姓名、地址、业务描述
-  - 无需 API Key，完全公开可访问
+Data quality notes:
+  - 100% legally registered businesses (official government database)
+  - Covers sole proprietorships and small businesses
+  - Includes business name, registrant name, address, business description
+  - No API Key required, fully publicly accessible
 
-限制说明：
-  - 每次搜索最多返回 20 条
-  - 需 Playwright 渲染（动态表单）
-  - 礼貌限速：3 req/min
+Limitations:
+  - Maximum 20 results per search
+  - Requires Playwright rendering (dynamic forms)
+  - Polite rate limiting: 3 req/min
 """
 from __future__ import annotations
 
@@ -30,23 +30,23 @@ from app.models.lead import LeadRaw, LeadSource
 
 @dataclass
 class DTIBNRSConfig(MinerConfig):
-    rate_limit_per_minute: int = 3        # 政府网站，极保守
+    rate_limit_per_minute: int = 3        # Government website, extremely conservative
     timeout_seconds: int = 60
-    max_pages: int = 5                    # 每次搜索最多翻 5 页
+    max_pages: int = 5                    # Maximum 5 pages per search
 
 
 class DTIBNRSMiner(BrowserBasedMiner):
     """
-    菲律宾贸工部（DTI）商号注册系统爬取插件。
+    Philippines Department of Trade and Industry (DTI) Business Name Registration System mining plugin.
 
-    搜索入口：https://bnrs.dti.gov.ph/web/guest/search
-    功能：搜索已注册商号，筛选活跃状态（REGISTERED）企业。
-    使用 Playwright 渲染 JavaScript 表单，自动填写关键词并抓取结果表格。
+    Search entry: https://bnrs.dti.gov.ph/web/guest/search
+    Function: Search registered business names, filter active status (REGISTERED) businesses.
+    Uses Playwright to render JavaScript forms, automatically fills in keywords and scrapes result tables.
 
-    字段映射：
-      business_name   ← Business Name 列
-      address         ← Address 列
-      phone           ← （DTI BNRS 不公示手机，从其他来源富化）
+    Field mapping:
+      business_name   ← Business Name column
+      address         ← Address column
+      phone           ← (DTI BNRS does not expose phone numbers, enrich from other sources)
       metadata        ← {owner_name, registration_no, status, business_type}
     """
 
@@ -72,7 +72,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
         collected = 0
 
         try:
-            # ── 打开搜索页面 ──────────────────────────────────────────────────
+            # ── Open search page ──────────────────────────────────────────────────
             await page.goto(
                 self.SEARCH_URL,
                 wait_until="networkidle",
@@ -80,8 +80,8 @@ class DTIBNRSMiner(BrowserBasedMiner):
             )
             await asyncio.sleep(2)
 
-            # ── 填写商号搜索关键词 ────────────────────────────────────────────
-            # DTI BNRS 搜索框的常见 ID / name 属性（多选择器兜底）
+            # ── Fill in business name search keyword ────────────────────────────────────────────
+            # Common ID / name attributes for DTI BNRS search box (multiple selectors as fallback)
             kw_selectors = [
                 'input[name*="businessName"]',
                 'input[id*="businessName"]',
@@ -102,13 +102,13 @@ class DTIBNRSMiner(BrowserBasedMiner):
 
             if not filled:
                 self.logger.warning("DTI BNRS: could not find keyword input, trying fallback")
-                # 回退：直接构造 GET 查询 URL
+                # Fallback: construct GET query URL directly
                 async for lead in self._mine_via_direct_url(keyword, location, limit, page):
                     yield lead
                     collected += 1
                 return
 
-            # ── 点击搜索按钮 ──────────────────────────────────────────────────
+            # ── Click search button ──────────────────────────────────────────────────
             btn_selectors = [
                 'button[type="submit"]',
                 'input[type="submit"]',
@@ -126,7 +126,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
             await page.wait_for_load_state("networkidle", timeout=30000)
             await asyncio.sleep(1)
 
-            # ── 遍历分页结果 ──────────────────────────────────────────────────
+            # ── Iterate paginated results ──────────────────────────────────────────────────
             current_page = 0
             while collected < limit and current_page < self.config.max_pages:
                 async for lead in self._parse_results_page(page, keyword):
@@ -135,7 +135,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
                     yield lead
                     collected += 1
 
-                # 翻页
+                # Next page
                 next_btn = await page.query_selector(
                     "a:has-text('Next'), "
                     "a[aria-label='Next'], "
@@ -163,7 +163,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
         page,
     ) -> AsyncIterator[LeadRaw]:
         """
-        回退方案：尝试通过 URL 参数直接调用 BNRS API 端点（某些版本支持）。
+        Fallback: attempt to directly call BNRS API endpoint via URL parameters (supported by some versions).
         https://bnrs.dti.gov.ph/api/businesses/search?query=<keyword>&status=REGISTERED
         """
         import json
@@ -174,7 +174,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
         try:
             resp = await page.goto(api_url, wait_until="networkidle", timeout=30000)
             content = await page.content()
-            # 尝试解析 JSON（API 端点返回 JSON）
+            # Attempt to parse JSON (API endpoint returns JSON)
             if resp and "application/json" in (resp.headers.get("content-type", "")):
                 data = json.loads(await resp.text())
                 items = data.get("content", data.get("data", []))
@@ -184,7 +184,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
             self.logger.warning(f"DTI BNRS API fallback failed: {exc}")
 
     def _item_to_lead(self, item: dict, keyword: str) -> LeadRaw:
-        """将 API JSON 对象转换为 LeadRaw。"""
+        """Convert API JSON object to LeadRaw."""
         loc = item.get("address") or item.get("businessAddress") or {}
         if isinstance(loc, dict):
             address_parts = filter(None, [
@@ -203,7 +203,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
             business_name=item.get("businessName", item.get("name", "")),
             industry_keyword=keyword,
             address=address,
-            phone="",    # DTI BNRS 不公示手机号
+            phone="",    # DTI BNRS does not expose phone numbers
             metadata={
                 "owner_name":        item.get("ownerName", ""),
                 "registration_no":   item.get("registrationNo", item.get("bnrsNo", "")),
@@ -220,10 +220,10 @@ class DTIBNRSMiner(BrowserBasedMiner):
         keyword: str,
     ) -> AsyncIterator[LeadRaw]:
         """
-        解析当前页面的搜索结果表格，提取业务信息并 yield LeadRaw。
-        兼容不同版本 BNRS 页面结构（table-based 和 list-based）。
+        Parse search results table on current page, extract business information and yield LeadRaw.
+        Compatible with different versions of BNRS page structure (table-based and list-based).
         """
-        # 方案 A：标准 HTML 表格
+        # Option A: Standard HTML table
         rows = await page.query_selector_all(
             "table tbody tr, "
             ".search-results tr:not(:first-child), "
@@ -241,19 +241,19 @@ class DTIBNRSMiner(BrowserBasedMiner):
                     t = await cell.inner_text()
                     texts.append(t.strip())
 
-                # 跳过表头行和空行
+                # Skip header rows and empty rows
                 biz_name = texts[0] if texts else ""
                 if not biz_name or biz_name.lower() in (
                     "business name", "name", "", "no results found"
                 ):
                     continue
 
-                # 列顺序：[business_name, owner/reg_no, address, status, ...]
+                # Column order: [business_name, owner/reg_no, address, status, ...]
                 owner_or_reg = texts[1] if len(texts) > 1 else ""
                 address      = texts[2] if len(texts) > 2 else ""
                 status       = texts[3] if len(texts) > 3 else ""
 
-                # 过滤非活跃企业
+                # Filter inactive businesses
                 if status and status.upper() not in ("REGISTERED", "ACTIVE", ""):
                     continue
 
@@ -271,7 +271,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
                 )
             return
 
-        # 方案 B：卡片式布局（新版 BNRS）
+        # Option B: Card layout (new BNRS version)
         cards = await page.query_selector_all(
             ".business-card, .result-card, .search-result-item"
         )
@@ -295,7 +295,7 @@ class DTIBNRSMiner(BrowserBasedMiner):
             )
 
     async def validate_config(self) -> bool:
-        return True    # 无需配置，公开访问
+        return True    # No configuration needed, publicly accessible
 
     async def health_check(self) -> MinerHealth:
         try:

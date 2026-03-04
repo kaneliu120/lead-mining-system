@@ -1,6 +1,6 @@
 """
-统一线索数据模型 — Lead Mining System
-所有 Miner 插件的输出契约（Pydantic v2）
+Unified lead data model — Lead Mining System
+Output contract for all Miner plugins (Pydantic v2)
 """
 from __future__ import annotations
 
@@ -13,15 +13,15 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# 枚举：数据源标识
+# Enum: data source identifiers
 # ---------------------------------------------------------------------------
 
 class LeadSource(str, Enum):
     SERPER          = "serper"
     SERPAPI         = "serpapi"
     OUTSCRAPER      = "outscraper"
-    HUNTER          = "hunter"   # 替代 Apollo.io，使用 Hunter.io联系人富化
-    APOLLO          = "apollo"    # 保留向后兼容，新安装不使用
+    HUNTER          = "hunter"   # Replaces Apollo.io — uses Hunter.io for contact enrichment
+    APOLLO          = "apollo"    # Kept for backwards-compatibility, not used in new installs
     SEC_PH          = "sec_ph"
     GOOGLE_CSE      = "google_cse"
     REDDIT          = "reddit"
@@ -33,40 +33,40 @@ class LeadSource(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# 核心模型：LeadRaw
+# Core model: LeadRaw
 # ---------------------------------------------------------------------------
 
-# 时区感知的当前 UTC 时间工厂（datetime.utcnow() 在 Python 3.12 已废弃）
+# Timezone-aware UTC now factory (datetime.utcnow() deprecated since Python 3.12)
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
 class LeadRaw(BaseModel):
-    """统一线索数据模型 — 所有 Miner 插件的输出契约"""
+    """Unified lead data model — output contract for all Miner plugins"""
 
     model_config = {"populate_by_name": True}
 
-    # ── 必填 ────────────────────────────────────────────────────────────────
+    # ── Required ─────────────────────────────────────────────────────────────
     source: LeadSource
     business_name: str
 
-    # ── 核心业务字段 ─────────────────────────────────────────────────────────
+    # ── Core business fields ─────────────────────────────────────────────────
     industry_keyword: str = ""
     address: str = ""
     phone: str = ""
     website: str = ""
     email: str = ""
 
-    # ── Google Maps 专属 ────────────────────────────────────────────────────
+    # ── Google Maps exclusive ──────────────────────────────────────────────────
     rating: Optional[float] = None
     review_count: Optional[int] = None
     google_maps_url: str = ""
     lat: Optional[float] = None
     lng: Optional[float] = None
 
-    # ── 扩展元数据（源特有字段，存 JSONB）───────────────────────────────────
+    # ── Extended metadata (source-specific fields, stored as JSONB) ──────────
     metadata: dict = Field(default_factory=dict)
-    # 示例：
+    # Examples:
     #   Serper:      {"place_id": "...", "cid": "...", "category": "..."}
     #   Apollo:      {"apollo_org_id": "...", "industry": "...", "linkedin_url": "..."}
     #   SEC PH:      {"sec_registration_no": "...", "company_type": "...", "status": "Active"}
@@ -74,15 +74,15 @@ class LeadRaw(BaseModel):
     #   PhilGEPS:    {"philgeps_ref": "...", "category": "..."}
     #   Google CSE:  {"search_snippet": "...", "display_link": "..."}
 
-    # ── 系统字段 ─────────────────────────────────────────────────────────────
+    # ── System fields ─────────────────────────────────────────────────────────
     collected_at: datetime = Field(default_factory=_utcnow)
     enriched: bool = False
     score: Optional[float] = None
 
-    # ── 方法 ─────────────────────────────────────────────────────────────────
+    # ── Methods ──────────────────────────────────────────────────────────────
 
     def dedup_key(self) -> str:
-        """生成去重键：优先 phone → google_maps_url → name+address"""
+        """Generate dedup key: priority phone → google_maps_url → name+address"""
         if self.phone:
             return f"phone:{self.phone.strip()}"
         if self.google_maps_url:
@@ -90,7 +90,7 @@ class LeadRaw(BaseModel):
         return f"name_addr:{self.business_name}:{self.address}"
 
     def to_chroma_document(self) -> str:
-        """生成用于 ChromaDB 向量检索的文本表示"""
+        """Generate text representation for ChromaDB vector retrieval"""
         parts = [
             f"Business: {self.business_name}",
             f"Industry: {self.industry_keyword}",
@@ -112,7 +112,7 @@ class LeadRaw(BaseModel):
         return "\n".join(parts)
 
     def to_summary(self) -> str:
-        """单行摘要，用于日志和调试"""
+        """Single-line summary for logging and debugging"""
         return (
             f"[{self.source.value}] {self.business_name} | "
             f"{self.phone or 'no-phone'} | "
@@ -122,13 +122,13 @@ class LeadRaw(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 联系人模型：ContactLead（Apollo 富化输出）
+# Contact model: ContactLead (Apollo enrichment output)
 # ---------------------------------------------------------------------------
 
 class ContactLead(BaseModel):
-    """联系人数据模型 — ApolloMiner 等联系人富化插件的输出"""
+    """Contact data model — output of ApolloMiner and other contact enrichment plugins"""
 
-    lead_ref: str                           # 关联的 LeadRaw.dedup_key()
+    lead_ref: str                           # Reference to LeadRaw.dedup_key()
     full_name: str = ""
     job_title: str = ""
     email: str = ""
@@ -142,34 +142,34 @@ class ContactLead(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 扩展模型：EnrichedLead（Gemini AI 富化后）
+# Extended model: EnrichedLead (after Gemini AI enrichment)
 # ---------------------------------------------------------------------------
 
 class EnrichedLead(LeadRaw):
-    """AI 富化后的线索数据（LeadRaw 的超集）"""
+    """Lead data after AI enrichment (superset of LeadRaw)"""
 
-    # ── AI 分析字段 ─────────────────────────────────────────────────────────
-    industry_category: str = ""            # 行业分类，如 "Food & Beverage"
+    # ── AI analysis fields ──────────────────────────────────────────────────
+    industry_category: str = ""            # Industry category, e.g. "Food & Beverage"
     business_size: str = ""                # "micro" | "small" | "medium"
     pain_points: list[str] = Field(default_factory=list)
     value_proposition: str = ""
     recommended_product: str = ""
-    outreach_angle: str = ""               # 外展邮件切入角度
-    score_reason: str = ""                 # 评分原因说明
-    best_contact_time: str = ""            # 建议联系时间
+    outreach_angle: str = ""               # Outreach email angle
+    score_reason: str = ""                 # Score rationale
+    best_contact_time: str = ""            # Recommended contact time
     enriched_at: Optional[datetime] = None
 
     def to_outreach_context(self) -> str:
-        """生成外展引擎使用的上下文字符串"""
+        """Generate context string for the outreach engine"""
         lines = [
-            f"企业名称: {self.business_name}",
-            f"行业: {self.industry_keyword}",
-            f"地址: {self.address}",
-            f"评分: {self.rating}（{self.review_count} 条评论）",
-            f"网站: {self.website}",
-            f"价值主张: {self.value_proposition}",
-            f"外展切入点: {self.outreach_angle}",
-            f"推荐产品/服务: {self.recommended_product}",
-            f"潜在痛点: {', '.join(self.pain_points)}",
+            f"Business Name: {self.business_name}",
+            f"Industry: {self.industry_keyword}",
+            f"Address: {self.address}",
+            f"Rating: {self.rating} ({self.review_count} reviews)",
+            f"Website: {self.website}",
+            f"Value Proposition: {self.value_proposition}",
+            f"Outreach Angle: {self.outreach_angle}",
+            f"Recommended Product/Service: {self.recommended_product}",
+            f"Pain Points: {', '.join(self.pain_points)}",
         ]
         return "\n".join(lines)
